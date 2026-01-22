@@ -1,6 +1,6 @@
-1. Project Title
+#1. Project Title
 Security-Provider
-2. Project Description
+#2. Project Description
 
 This project is a comprehensive security management and booking system that operates under a single unified application. It allows:
 
@@ -32,7 +32,7 @@ Manage users, guards, and bookings
 
 Ensure service quality and maintain platform security and reliability
 
-3. Installation
+#3. Installation
 
 To run this project locally, follow these steps:
 
@@ -55,25 +55,17 @@ Start the development server:
 
 npm start  # or python app.py
 
-5. Usage
+#4. Usage
 
 Guard: Register, submit documents, check schedules, and receive updates.
 
 Client: Browse guards, check availability, book services, and track bookings.
 
-Admin: Approve/reject guard applications, manage users, and maintain the platform.
+Admin: Approve/reject guard applications, maintain the platform.
 
-Visual aids such as screenshots can be added here to illustrate the dashboard, booking pages, or guard registration process.
 
-Example Credentials (for testing purposes):
 
-Admin: admin@example.com / password123
-
-Guard: guard@example.com / password123
-
-Client: client@example.com / password123
-
-6. Credits
+#5. Credits
 
 Developed by: fayaz abrar
 
