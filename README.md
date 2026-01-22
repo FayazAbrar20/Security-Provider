@@ -10,7 +10,7 @@ Sign up and log in to the platform
 
 View assigned schedules
 
-Receive updates on approval status and work assignments
+approve work assignments
 
 Clients to:
 
