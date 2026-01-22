@@ -40,21 +40,6 @@ Clone the repository:
 
 git clone https://github.com/FayazAbrar20/Security-Provider
 
-
-Navigate to the project directory:
-
-cd security-guard-system
-
-
-Install required dependencies:
-
-npm install  # or pip install -r requirements.txt depending on the tech stack
-
-
-Start the development server:
-
-npm start  # or python app.py
-
 #4. Usage
 
 Guard: Register, submit documents, check schedules, and receive updates.
@@ -63,12 +48,7 @@ Client: Browse guards, check availability, book services, and track bookings.
 
 Admin: Approve/reject guard applications, maintain the platform.
 
-
-
 #5. Credits
-
-Developed by: fayaz abrar
-
-Team Members: hasibul islam
+Team Members:  fayaz abrar, hasibul islam
 , MD. IMRUL KAYES RIFAT
 
