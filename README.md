@@ -8,8 +8,6 @@ Security Guards to:
 
 Sign up and log in to the platform
 
-Apply for registration by submitting their personal details and required documents
-
 View assigned schedules
 
 Receive updates on approval status and work assignments
