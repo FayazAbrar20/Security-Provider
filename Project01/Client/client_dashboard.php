@@ -1,5 +1,4 @@
     <?php
-    session_start();
     include "../db.php";
 
     if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'client') {
@@ -8,162 +7,139 @@
     }
 
     $user_id = $_SESSION['user_id'];
+    $allowedOrgTypes = ['home', 'industry', 'individual'];
 
-    $sql = "SELECT u.email, c.* FROM users u
-            JOIN clients c ON u.user_id = c.user_id
-            WHERE u.user_id='$user_id'";
-    $result = mysqli_query($conn, $sql);
-    $client = mysqli_fetch_assoc($result);
+    function load_client(mysqli $conn, $user_id): ?array
+    {
+        return db_one($conn,
+            "SELECT u.email, c.* FROM users u JOIN clients c ON u.user_id = c.user_id WHERE u.user_id = ?",
+            [$user_id]);
+    }
 
-    $total_bookings = mysqli_fetch_assoc(mysqli_query(
-        $conn,
-        "SELECT COUNT(*) as count FROM bookings WHERE client_id='{$client['id']}'"
-    ))['count'];
+    $client = load_client($conn, $user_id);
+    if (!$client) {
+        header("Location: client_logout.php");
+        exit();
+    }
 
-    $pending_bookings = mysqli_fetch_assoc(mysqli_query(
-        $conn,
-        "SELECT COUNT(*) as count FROM bookings WHERE client_id='{$client['id']}' AND status='pending'"
-    ))['count'];
+    // Cancel a pending booking (only the client's own).
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancel_booking'])) {
+        db_query($conn,
+            "UPDATE bookings SET status = 'cancelled' WHERE id = ? AND client_id = ? AND status = 'pending'",
+            [(int)($_POST['booking_id'] ?? 0), $client['id']]);
 
-    $confirmed_bookings = mysqli_fetch_assoc(mysqli_query(
-        $conn,
-        "SELECT COUNT(*) as count FROM bookings WHERE client_id='{$client['id']}' AND status='confirmed'"
-    ))['count'];
+        header("Location: client_dashboard.php#my-bookings");
+        exit();
+    }
 
+    $counts = db_one($conn,
+        "SELECT COUNT(*) AS total,
+                SUM(status = 'pending') AS pending,
+                SUM(status = 'confirmed') AS confirmed
+         FROM bookings WHERE client_id = ?",
+        [$client['id']]);
+    $total_bookings     = (int)($counts['total'] ?? 0);
+    $pending_bookings   = (int)($counts['pending'] ?? 0);
+    $confirmed_bookings = (int)($counts['confirmed'] ?? 0);
 
-        $search = "";
-        $whereSearch = "";
+    // Search approved guards by name, location or specialty.
+    $search = trim($_GET['search'] ?? "");
+    $guards_sql = "SELECT g.*, u.email AS guard_email
+                   FROM guards g
+                   JOIN users u ON u.user_id = g.user_id
+                   WHERE g.verification_status = 'approved'";
+    $guards_params = [];
+    if ($search !== "") {
+        $guards_sql .= " AND (g.full_name LIKE ? OR g.location LIKE ? OR g.specialties LIKE ?)";
+        $like = "%" . $search . "%";
+        $guards_params = [$like, $like, $like];
+    }
+    $guards_sql .= " ORDER BY g.created_at DESC";
 
-        if (isset($_GET['search']) && trim($_GET['search']) !== "") {
-            $search = mysqli_real_escape_string($conn, trim($_GET['search']));
-            $whereSearch = "AND (
-                g.full_name LIKE '%$search%' OR
-                g.location LIKE '%$search%' OR
-                g.specialties LIKE '%$search%'
-            )";
-        }
-
-        $guards_sql = "SELECT g.*, u.email AS guard_email
-                FROM guards g
-                JOIN users u ON u.user_id = g.user_id
-                WHERE g.verification_status='approved'
-                $whereSearch
-                ORDER BY g.created_at DESC";
-
-        $guards_result = mysqli_query($conn, $guards_sql);
-
-
-        $guards = [];
+    $guards = [];
+    $guards_result = db_query($conn, $guards_sql, $guards_params);
+    if ($guards_result && $guards_result !== true) {
         while ($guard = mysqli_fetch_assoc($guards_result)) {
             $guards[] = $guard;
         }
+    }
 
+    // Update profile
     $success = "";
     $nameErr = $phoneErr = "";
 
     if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['update_profile'])) {
         $valid = true;
 
-        $name = mysqli_real_escape_string($conn, trim($_POST["name"]));
-        $phone = mysqli_real_escape_string($conn, trim($_POST["phone"]));
-        $address = mysqli_real_escape_string($conn, trim($_POST["address"]));
-        $org_type = mysqli_real_escape_string($conn, $_POST["org_type"]);
+        $name = trim($_POST["name"] ?? "");
+        $phone = trim($_POST["phone"] ?? "");
+        $address = trim($_POST["address"] ?? "");
+        $org_type = $_POST["org_type"] ?? "";
+        if (!in_array($org_type, $allowedOrgTypes, true)) {
+            $org_type = $client['organization_type'];
+        }
 
-        if (empty($name)) {
-            $nameErr = "Name is required";
+        if (!preg_match("/^[a-zA-Z-' ]{2,100}$/", $name)) {
+            $nameErr = "Name is required (letters, spaces, - and ' only)";
             $valid = false;
         }
 
-        if (empty($phone) || !preg_match("/^[0-9]{10,15}$/", $phone)) {
+        if (!preg_match("/^[0-9]{10,15}$/", $phone)) {
             $phoneErr = "Invalid phone number";
             $valid = false;
         }
 
-        if ($valid) {
-            $sql = "UPDATE clients SET
-                    full_name='$name',
-                    phone='$phone',
-                    address='$address',
-                    organization_type='$org_type'
-                    WHERE user_id='$user_id'";
-
-            if (mysqli_query($conn, $sql)) {
-                $success = "Profile updated successfully!";
-                $sql = "SELECT u.email, c.* FROM users u
-                        JOIN clients c ON u.user_id = c.user_id
-                        WHERE u.user_id='$user_id'";
-                $result = mysqli_query($conn, $sql);
-                $client = mysqli_fetch_assoc($result);
-            }
+        if ($valid && db_query($conn,
+                "UPDATE clients SET full_name = ?, phone = ?, address = ?, organization_type = ? WHERE user_id = ?",
+                [$name, $phone, $address, $org_type, $user_id])) {
+            $success = "Profile updated successfully!";
+            $client = load_client($conn, $user_id);
         }
     }
 
+    // Change password
+    $currentErr = $newErr = $confirmErr = "";
+    $passwordSuccess = "";
 
-        $currentErr = $newErr = $confirmErr = "";
-        $passwordSuccess = "";
+    if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['change_password'])) {
+        $valid = true;
 
-        if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['change_password'])) {
-            $valid = true;
+        $current = $_POST["current_password"] ?? "";
+        $new = $_POST["new_password"] ?? "";
+        $confirm = $_POST["confirm_password"] ?? "";
 
-            $current = $_POST["current_password"];
-            $new = $_POST["new_password"];
-            $confirm = $_POST["confirm_password"];
+        $user = db_one($conn, "SELECT password FROM users WHERE user_id = ?", [$user_id]);
 
-            $sql = "SELECT password FROM users WHERE user_id='$user_id'";
-            $result = mysqli_query($conn, $sql);
-            $user = mysqli_fetch_assoc($result);
-
-            if (!password_verify($current, $user['password'])) {
-                $currentErr = "Current password is incorrect";
-                $valid = false;
-            }
-
-            if (strlen($new) < 6) {
-                $newErr = "Password must be at least 6 characters";
-                $valid = false;
-            }
-
-            if ($new !== $confirm) {
-                $confirmErr = "Passwords do not match";
-                $valid = false;
-            }
-
-            if ($valid) {
-                $hashed = password_hash($new, PASSWORD_DEFAULT);
-                $sql = "UPDATE users SET password='$hashed' WHERE user_id='$user_id'";
-
-                if (mysqli_query($conn, $sql)) {
-                    $passwordSuccess = "Password changed successfully!";
-                }
-            }
+        if (!$user || !password_verify($current, $user['password'])) {
+            $currentErr = "Current password is incorrect";
+            $valid = false;
         }
 
-
-
-        if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['cancel_booking'])) {
-
-            $booking_id = (int)$_POST['booking_id'];
-            $user_id    = $_SESSION['user_id'];
-
-            $client_res = mysqli_query($conn, "SELECT id FROM clients WHERE user_id='$user_id'");
-            $client = mysqli_fetch_assoc($client_res);
-            $client_id = $client['id'];
-
-            $cancel_sql = "
-                UPDATE bookings 
-                SET status='cancelled'
-                WHERE id='$booking_id'
-                AND client_id='$client_id'
-                AND status='pending'
-            ";
-
-            mysqli_query($conn, $cancel_sql);
-
-            header("Location: client_dashboard.php#my-bookings");
-            exit();
+        if (($problem = password_problem($new)) !== "") {
+            $newErr = $problem;
+            $valid = false;
         }
 
+        if ($new !== $confirm) {
+            $confirmErr = "Passwords do not match";
+            $valid = false;
+        }
 
+        if ($valid && db_query($conn, "UPDATE users SET password = ? WHERE user_id = ?",
+                               [password_hash($new, PASSWORD_DEFAULT), $user_id])) {
+            db_query($conn, "DELETE FROM remember_tokens WHERE user_id = ?", [$user_id]);
+            $passwordSuccess = "Password changed successfully!";
+        }
+    }
+
+    // The client's bookings (shown in the "My Bookings" panel).
+    $bookings_result = db_query($conn,
+        "SELECT b.*, g.full_name AS guard_name, g.location, g.hourly_rate
+         FROM bookings b
+         JOIN guards g ON b.guard_id = g.id
+         WHERE b.client_id = ?
+         ORDER BY b.created_at DESC",
+        [$client['id']]);
 ?>
 
 <!DOCTYPE html>
@@ -595,22 +571,22 @@
     <!-- Main Content -->
     <div class="main-content">
         <div class="header">
-            <h2>Welcome, <?php echo $client['full_name']; ?>!</h2>
-            <p style="color:#666;">Email: <?php echo $client['email']; ?></p>
+            <h2>Welcome, <?php echo e($client['full_name']); ?>!</h2>
+            <p style="color:#666;">Email: <?php echo e($client['email']); ?></p>
         </div>
 
         <!-- Statistics -->
         <div class="stats-container">
             <div class="stat-card">
-                <h3><?php echo $total_bookings; ?></h3>
+                <h3><?php echo e($total_bookings); ?></h3>
                 <p>Total Bookings</p>
             </div>
             <div class="stat-card">
-                <h3><?php echo $pending_bookings; ?></h3>
+                <h3><?php echo e($pending_bookings); ?></h3>
                 <p>Pending Bookings</p>
             </div>
             <div class="stat-card">
-                <h3><?php echo $confirmed_bookings; ?></h3>
+                <h3><?php echo e($confirmed_bookings); ?></h3>
                 <p>Confirmed Bookings</p>
             </div>
         </div>
@@ -649,24 +625,24 @@
                     <div class="guard-card">
                         <div class="guard-image-container">
                             <?php if ($img_src): ?>
-                                <img src="<?php echo $img_src; ?>" alt="<?php echo $guard['full_name']; ?>" class="guard-image">
+                                <img src="<?php echo e($img_src); ?>" alt="<?php echo e($guard['full_name']); ?>" class="guard-image">
                             <?php endif; ?>
                         </div>
 
-                        <span class="availability-badge"><?php echo $availability; ?></span>
+                        <span class="availability-badge"><?php echo e($availability); ?></span>
 
                         <div class="guard-info">
-                            <div class="guard-name"><?php echo $guard['full_name']; ?></div>
-                            <div class="guard-location"><?php echo $guard['location']; ?></div>
+                            <div class="guard-name"><?php echo e($guard['full_name']); ?></div>
+                            <div class="guard-location"><?php echo e($guard['location']); ?></div>
 
                             <div class="guard-rating">
-                                Rating <?php echo $rating; ?> (<?php echo $reviews; ?>)
+                                Rating <?php echo e($rating); ?> (<?php echo e($reviews); ?>)
                             </div>
 
                             <div class="guard-specialties">
                                 <?php foreach ($specialties as $specialty): ?>
                                     <?php if (trim($specialty) !== ""): ?>
-                                        <span class="specialty-tag"><?php echo trim($specialty); ?></span>
+                                        <span class="specialty-tag"><?php echo e(trim($specialty)); ?></span>
                                     <?php endif; ?>
                                 <?php endforeach; ?>
                             </div>
@@ -676,7 +652,7 @@
                                     $<?php echo number_format((float)$guard['hourly_rate'], 0); ?>
                                     <span class="price-unit">/hr</span>
                                 </div>
-                                <a href="#guard-modal-<?php echo $guard['id']; ?>" class="view-profile-btn">
+                                <a href="#guard-modal-<?php echo e($guard['id']); ?>" class="view-profile-btn">
                                     View Profile
                                 </a>
                             </div>
@@ -697,12 +673,12 @@
         <h3>My Profile</h3>
 
         <table class="info-table">
-            <tr><th>Full Name:</th><td><?php echo $client['full_name']; ?></td></tr>
-            <tr><th>Email:</th><td><?php echo $client['email']; ?></td></tr>
-            <tr><th>Phone:</th><td><?php echo $client['phone']; ?></td></tr>
-            <tr><th>Address:</th><td><?php echo $client['address'] ?: 'Not provided'; ?></td></tr>
-            <tr><th>Organization Type:</th><td><?php echo ucfirst($client['organization_type']); ?></td></tr>
-            <tr><th>Member Since:</th><td><?php echo date('F d, Y', strtotime($client['created_at'])); ?></td></tr>
+            <tr><th>Full Name:</th><td><?php echo e($client['full_name']); ?></td></tr>
+            <tr><th>Email:</th><td><?php echo e($client['email']); ?></td></tr>
+            <tr><th>Phone:</th><td><?php echo e($client['phone']); ?></td></tr>
+            <tr><th>Address:</th><td><?php echo e($client['address'] ?: 'Not provided'); ?></td></tr>
+            <tr><th>Organization Type:</th><td><?php echo e(ucfirst($client['organization_type'])); ?></td></tr>
+            <tr><th>Member Since:</th><td><?php echo e(date('F d, Y', strtotime($client['created_at']))); ?></td></tr>
         </table>
     </div>
 
@@ -712,25 +688,26 @@
         <h3>Edit Profile</h3>
 
         <?php if ($success): ?>
-            <div class="success"><?php echo $success; ?></div>
+            <div class="success"><?php echo e($success); ?></div>
         <?php endif; ?>
 
         <form method="post" action="#profile-edit">
+<?php echo csrf_field(); ?>
             <div class="field">
                 <label>Full Name:</label>
-                <input type="text" name="name" value="<?php echo $client['full_name']; ?>">
-                <span class="error"><?php echo $nameErr; ?></span>
+                <input type="text" name="name" value="<?php echo e($client['full_name']); ?>">
+                <span class="error"><?php echo e($nameErr); ?></span>
             </div>
 
             <div class="field">
                 <label>Phone:</label>
-                <input type="text" name="phone" value="<?php echo $client['phone']; ?>">
-                <span class="error"><?php echo $phoneErr; ?></span>
+                <input type="text" name="phone" value="<?php echo e($client['phone']); ?>">
+                <span class="error"><?php echo e($phoneErr); ?></span>
             </div>
 
             <div class="field">
                 <label>Address:</label>
-                <textarea name="address" rows="3"><?php echo $client['address']; ?></textarea>
+                <textarea name="address" rows="3"><?php echo e($client['address']); ?></textarea>
             </div>
 
             <div class="field">
@@ -752,26 +729,27 @@
         <h3>Change Password</h3>
 
         <?php if ($passwordSuccess): ?>
-            <div class="success"><?php echo $passwordSuccess; ?></div>
+            <div class="success"><?php echo e($passwordSuccess); ?></div>
         <?php endif; ?>
 
         <form method="post" action="#password-change">
+<?php echo csrf_field(); ?>
             <div class="field">
                 <label>Current Password:</label>
                 <input type="password" name="current_password">
-                <span class="error"><?php echo $currentErr; ?></span>
+                <span class="error"><?php echo e($currentErr); ?></span>
             </div>
 
             <div class="field">
                 <label>New Password:</label>
                 <input type="password" name="new_password">
-                <span class="error"><?php echo $newErr; ?></span>
+                <span class="error"><?php echo e($newErr); ?></span>
             </div>
 
             <div class="field">
                 <label>Confirm New Password:</label>
                 <input type="password" name="confirm_password">
-                <span class="error"><?php echo $confirmErr; ?></span>
+                <span class="error"><?php echo e($confirmErr); ?></span>
             </div>
 
             <button type="submit" name="change_password" class="btn">Change Password</button>
@@ -784,16 +762,7 @@
         <a href="#" class="close-btn">&times;</a>
         <h3>My Bookings</h3>
 
-        <?php
-        $bookings_sql = "SELECT b.*, g.full_name AS guard_name, g.location, g.hourly_rate
-                            FROM bookings b
-                            JOIN guards g ON b.guard_id = g.id
-                            WHERE b.client_id = '{$client['id']}'
-                            ORDER BY b.created_at DESC";
-        $bookings_result = mysqli_query($conn, $bookings_sql);
-
-        if (mysqli_num_rows($bookings_result) > 0):
-        ?>
+        <?php if ($bookings_result && $bookings_result !== true && mysqli_num_rows($bookings_result) > 0): ?>
             <table class="info-table">
                 <tr>
                     <th>Guard</th>
@@ -801,14 +770,24 @@
                     <th>Hourly Rate</th>
                     <th>Status</th>
                     <th>Booked On</th>
+                    <th></th>
                 </tr>
                 <?php while ($booking = mysqli_fetch_assoc($bookings_result)): ?>
                 <tr>
-                    <td><?php echo htmlspecialchars($booking['guard_name']); ?></td>
-                    <td><?php echo htmlspecialchars($booking['location']); ?></td>
-                    <td>$<?php echo number_format($booking['hourly_rate'], 2); ?>/hr</td>
-                    <td><?php echo ucfirst($booking['status']); ?></td>
-                    <td><?php echo date('F d, Y H:i', strtotime($booking['created_at'])); ?></td>
+                    <td><?php echo e($booking['guard_name']); ?></td>
+                    <td><?php echo e($booking['location']); ?></td>
+                    <td>$<?php echo number_format((float)$booking['hourly_rate'], 2); ?>/hr</td>
+                    <td><?php echo e(ucfirst($booking['status'])); ?></td>
+                    <td><?php echo e(date('F d, Y H:i', strtotime($booking['created_at']))); ?></td>
+                    <td>
+                        <?php if ($booking['status'] === 'pending'): ?>
+                            <form method="post" onsubmit="return confirm('Cancel this booking?');">
+                                <?php echo csrf_field(); ?>
+                                <input type="hidden" name="booking_id" value="<?php echo (int)$booking['id']; ?>">
+                                <button type="submit" name="cancel_booking" class="btn">Cancel</button>
+                            </form>
+                        <?php endif; ?>
+                    </td>
                 </tr>
                 <?php endwhile; ?>
             </table>
@@ -822,10 +801,10 @@
         
 
         <!-- Guard Modal -->
-        <div id="guard-modal-<?php echo $guard['id']; ?>" class="modal-card guard-profile-card">
+        <div id="guard-modal-<?php echo e($guard['id']); ?>" class="modal-card guard-profile-card">
             <a href="#" class="close-btn">&times;</a>
 
-            <h3><?php echo $guard['full_name']; ?></h3>
+            <h3><?php echo e($guard['full_name']); ?></h3>
 
             
         <?php if (!empty($guard['profile_image'])): ?>
@@ -834,19 +813,20 @@
         <?php endif; ?>
 
             <table class="info-table">
-                <tr><th>Location:</th><td><?php echo $guard['location']; ?></td></tr>
-                <tr><th>Phone:</th><td><?php echo $guard['phone']; ?></td></tr>
-                <tr><th>Experience:</th><td><?php echo $guard['experience']; ?> years</td></tr>
+                <tr><th>Location:</th><td><?php echo e($guard['location']); ?></td></tr>
+                <tr><th>Phone:</th><td><?php echo e($guard['phone']); ?></td></tr>
+                <tr><th>Experience:</th><td><?php echo e($guard['experience']); ?> years</td></tr>
                 <tr><th>Hourly Rate:</th><td>$<?php echo number_format($guard['hourly_rate'], 2); ?>/hr</td></tr>
-                <tr><th>Skills:</th><td><?php echo nl2br($guard['skills']); ?></td></tr>
-                <tr><th>Specialties:</th><td><?php echo $guard['specialties']; ?></td></tr>
+                <tr><th>Skills:</th><td><?php echo nl2br(e($guard['skills'])); ?></td></tr>
+                <tr><th>Specialties:</th><td><?php echo e($guard['specialties']); ?></td></tr>
             </table>
 
-            <!-- Book This Guard Button -->
-            <a href="client_book_guards.php?guard_id=<?php echo $guard['id']; ?>"
-            class="btn" style="margin-top:15px;">
-            Book This Guard
-            </a>
+            <!-- Book This Guard Button (POST + CSRF token, so a link cannot book on someone's behalf) -->
+            <form method="post" action="client_book_guards.php" style="margin-top:15px;">
+                <?php echo csrf_field(); ?>
+                <input type="hidden" name="guard_id" value="<?php echo (int)$guard['id']; ?>">
+                <button type="submit" class="btn">Book This Guard</button>
+            </form>
         </div>
     <?php endforeach; ?>
 

@@ -1,13 +1,23 @@
 <?php
-session_start();
 include "../db.php";
+
+// Who may create an admin account:
+//  - anyone, but only while no admin exists yet (first-time setup), or
+//  - an admin who is already logged in.
+$adminCount = (int)(db_one($conn, "SELECT COUNT(*) AS n FROM users WHERE role = 'admin'")['n'] ?? 0);
+$isAdmin = ($_SESSION['role'] ?? '') === 'admin';
+
+if ($adminCount > 0 && !$isAdmin) {
+    header("Location: admin_login.php");
+    exit();
+}
 
 $error = "";
 $success = "";
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
-    $email = mysqli_real_escape_string($conn, trim($_POST["email"] ?? ""));
+    $email = trim($_POST["email"] ?? "");
     $password = $_POST["password"] ?? "";
     $confirm = $_POST["confirm_password"] ?? "";
 
@@ -15,28 +25,21 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $error = "All fields are required.";
     } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $error = "Invalid email format.";
-    } elseif (strlen($password) < 6) {
-        $error = "Password must be at least 6 characters.";
+    } elseif (($problem = password_problem($password)) !== "") {
+        $error = $problem;
     } elseif ($password !== $confirm) {
         $error = "Passwords do not match.";
+    } elseif (db_one($conn, "SELECT user_id FROM users WHERE email = ? LIMIT 1", [$email])) {
+        $error = "This email is already registered.";
     } else {
-        // Check if email already exists
-        $checkSql = "SELECT user_id FROM users WHERE email='$email' LIMIT 1";
-        $checkRes = mysqli_query($conn, $checkSql);
+        $ok = db_query($conn,
+            "INSERT INTO users (email, password, role, created_at) VALUES (?, ?, 'admin', NOW())",
+            [$email, password_hash($password, PASSWORD_DEFAULT)]);
 
-        if ($checkRes && mysqli_num_rows($checkRes) > 0) {
-            $error = "This email is already registered.";
+        if ($ok) {
+            $success = "Admin registration successful! You can login now.";
         } else {
-            $hashed = password_hash($password, PASSWORD_DEFAULT); // store hashed password [web:256]
-
-            $sql = "INSERT INTO users (email, password, role, created_at)
-                    VALUES ('$email', '$hashed', 'admin', NOW())";
-
-            if (mysqli_query($conn, $sql)) {
-                $success = "Admin registration successful! You can login now.";
-            } else {
-                $error = "Database error: " . mysqli_error($conn);
-            }
+            $error = "Registration failed. Please try again.";
         }
     }
 }
@@ -173,14 +176,15 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             <h2 style="margin-top:0;">Admin Registration</h2>
 
             <?php if ($error): ?>
-                <div class="msg-error"><?php echo $error; ?></div>
+                <div class="msg-error"><?php echo e($error); ?></div>
             <?php endif; ?>
 
             <?php if ($success): ?>
-                <div class="msg-success"><?php echo $success; ?></div>
+                <div class="msg-success"><?php echo e($success); ?></div>
             <?php endif; ?>
 
             <form method="POST" action="admin_registration.php">
+<?php echo csrf_field(); ?>
                 <div class="row">
                     <label for="email"><b>Email</b></label>
                     <input type="email" id="email" name="email" required>

@@ -1,5 +1,4 @@
 <?php
-session_start();
 include "../db.php";
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'guard') {
@@ -10,62 +9,44 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'guard') {
 $user_id = $_SESSION['user_id'];
 
 // Get guard info
-$sql = "SELECT u.email, g.* FROM users u
-        JOIN guards g ON u.user_id = g.user_id
-        WHERE u.user_id='$user_id'";
-$result = mysqli_query($conn, $sql);
-$guard = mysqli_fetch_assoc($result);
+$guard = db_one($conn,
+    "SELECT u.email, g.* FROM users u JOIN guards g ON u.user_id = g.user_id WHERE u.user_id = ?",
+    [$user_id]);
+if (!$guard) {
+    header("Location: guard_logout.php");
+    exit();
+}
 
-// Get booking statistics
-$total_bookings = mysqli_fetch_assoc(mysqli_query(
-    $conn,
-    "SELECT COUNT(*) as count FROM bookings WHERE guard_id='{$guard['id']}'"
-))['count'];
+// Confirm or reject one of this guard's pending bookings.
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['confirm_booking']) || isset($_POST['reject_booking']))) {
+    $new_status = isset($_POST['confirm_booking']) ? 'confirmed' : 'rejected';
+    db_query($conn,
+        "UPDATE bookings SET status = ? WHERE id = ? AND guard_id = ? AND status = 'pending'",
+        [$new_status, (int)($_POST['booking_id'] ?? 0), $guard['id']]);
 
-$pending_bookings = mysqli_fetch_assoc(mysqli_query(
-    $conn,
-    "SELECT COUNT(*) as count FROM bookings WHERE guard_id='{$guard['id']}' AND status='pending'"
-))['count'];
-
-$confirmed_bookings = mysqli_fetch_assoc(mysqli_query(
-    $conn,
-    "SELECT COUNT(*) as count FROM bookings WHERE guard_id='{$guard['id']}' AND status='confirmed'"
-))['count'];
-
-// Handle booking actions
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['confirm_booking'])) {
-    $booking_id = (int)$_POST['booking_id'];
-    $guard_id = $guard['id'];
-    
-    $sql = "UPDATE bookings 
-            SET status='confirmed'
-            WHERE id='$booking_id' AND guard_id='$guard_id' AND status='pending'";
-    mysqli_query($conn, $sql);
-    
     header("Location: guard_dashboard.php#my-bookings");
     exit();
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['reject_booking'])) {
-    $booking_id = (int)$_POST['booking_id'];
-    $guard_id = $guard['id'];
-    
-    $sql = "UPDATE bookings 
-            SET status='rejected'
-            WHERE id='$booking_id' AND guard_id='$guard_id' AND status='pending'";
-    mysqli_query($conn, $sql);
-    
-    header("Location: guard_dashboard.php#my-bookings");
-    exit();
-}
+// Booking statistics
+$counts = db_one($conn,
+    "SELECT COUNT(*) AS total,
+            SUM(status = 'pending') AS pending,
+            SUM(status = 'confirmed') AS confirmed
+     FROM bookings WHERE guard_id = ?",
+    [$guard['id']]);
+$total_bookings     = (int)($counts['total'] ?? 0);
+$pending_bookings   = (int)($counts['pending'] ?? 0);
+$confirmed_bookings = (int)($counts['confirmed'] ?? 0);
 
 // Get guard's bookings
-$bookings_sql = "SELECT b.*, c.full_name AS client_name, c.phone AS client_phone, c.organization_type
-                FROM bookings b
-                JOIN clients c ON b.client_id = c.id
-                WHERE b.guard_id = '{$guard['id']}'
-                ORDER BY b.created_at DESC";
-$bookings_result = mysqli_query($conn, $bookings_sql);
+$bookings_result = db_query($conn,
+    "SELECT b.*, c.full_name AS client_name, c.phone AS client_phone, c.organization_type
+     FROM bookings b
+     JOIN clients c ON b.client_id = c.id
+     WHERE b.guard_id = ?
+     ORDER BY b.created_at DESC",
+    [$guard['id']]);
 ?>
 
 <!DOCTYPE html>
@@ -373,22 +354,22 @@ $bookings_result = mysqli_query($conn, $bookings_sql);
     <!-- Main Content -->
     <div class="main-content">
         <div class="header">
-            <h2>Welcome, <?php echo $guard['full_name']; ?>!</h2>
-            <p style="color:#666;">Email: <?php echo $guard['email']; ?> | Status: <?php echo ucfirst($guard['verification_status']); ?></p>
+            <h2>Welcome, <?php echo e($guard['full_name']); ?>!</h2>
+            <p style="color:#666;">Email: <?php echo e($guard['email']); ?> | Status: <?php echo e(ucfirst($guard['verification_status'])); ?></p>
         </div>
 
         <!-- Statistics -->
         <div class="stats-container">
             <div class="stat-card">
-                <h3><?php echo $total_bookings; ?></h3>
+                <h3><?php echo e($total_bookings); ?></h3>
                 <p>Total Bookings</p>
             </div>
             <div class="stat-card">
-                <h3><?php echo $pending_bookings; ?></h3>
+                <h3><?php echo e($pending_bookings); ?></h3>
                 <p>Pending Bookings</p>
             </div>
             <div class="stat-card">
-                <h3><?php echo $confirmed_bookings; ?></h3>
+                <h3><?php echo e($confirmed_bookings); ?></h3>
                 <p>Confirmed Bookings</p>
             </div>
         </div>
@@ -416,22 +397,24 @@ $bookings_result = mysqli_query($conn, $bookings_sql);
                         <tr>
                             <td><?php echo htmlspecialchars($booking['client_name']); ?></td>
                             <td><?php echo htmlspecialchars($booking['client_phone']); ?></td>
-                            <td><?php echo ucfirst($booking['organization_type']); ?></td>
+                            <td><?php echo e(ucfirst($booking['organization_type'])); ?></td>
                             <td>
-                                <span class="status-badge status-<?php echo $booking['status']; ?>">
-                                    <?php echo ucfirst($booking['status']); ?>
+                                <span class="status-badge status-<?php echo e($booking['status']); ?>">
+                                    <?php echo e(ucfirst($booking['status'])); ?>
                                 </span>
                             </td>
-                            <td><?php echo date('M d, Y', strtotime($booking['created_at'])); ?></td>
+                            <td><?php echo e(date('M d, Y', strtotime($booking['created_at']))); ?></td>
                             <td>
                                 <?php if ($booking['status'] === 'pending'): ?>
                                     <div class="action-buttons">
                                         <form method="post" style="display: inline;">
-                                            <input type="hidden" name="booking_id" value="<?php echo $booking['id']; ?>">
+<?php echo csrf_field(); ?>
+                                            <input type="hidden" name="booking_id" value="<?php echo e($booking['id']); ?>">
                                             <button type="submit" name="confirm_booking" class="btn btn-confirm">Confirm</button>
                                         </form>
                                         <form method="post" style="display: inline;">
-                                            <input type="hidden" name="booking_id" value="<?php echo $booking['id']; ?>">
+<?php echo csrf_field(); ?>
+                                            <input type="hidden" name="booking_id" value="<?php echo e($booking['id']); ?>">
                                             <button type="submit" name="reject_booking" class="btn btn-reject" onclick="return confirm('Reject this booking?')">Reject</button>
                                         </form>
                                     </div>
@@ -457,12 +440,12 @@ $bookings_result = mysqli_query($conn, $bookings_sql);
         <a href="#" class="close-btn">&times;</a>
         <h3>My Profile</h3>
         <table style="width: 100%; margin-top: 15px; border-collapse: collapse;">
-            <tr><th style="padding: 10px; border-bottom: 1px solid #eee;">Full Name:</th><td style="padding: 10px; border-bottom: 1px solid #eee;"><?php echo $guard['full_name']; ?></td></tr>
-            <tr><th style="padding: 10px; border-bottom: 1px solid #eee;">Email:</th><td style="padding: 10px; border-bottom: 1px solid #eee;"><?php echo $guard['email']; ?></td></tr>
-            <tr><th style="padding: 10px; border-bottom: 1px solid #eee;">Phone:</th><td style="padding: 10px; border-bottom: 1px solid #eee;"><?php echo $guard['phone']; ?></td></tr>
-            <tr><th style="padding: 10px; border-bottom: 1px solid #eee;">Location:</th><td style="padding: 10px; border-bottom: 1px solid #eee;"><?php echo $guard['location']; ?></td></tr>
-            <tr><th style="padding: 10px; border-bottom: 1px solid #eee;">Experience:</th><td style="padding: 10px; border-bottom: 1px solid #eee;"><?php echo $guard['experience']; ?> years</td></tr>
-            <tr><th style="padding: 10px;">Status:</th><td style="padding: 10px;"><?php echo ucfirst($guard['verification_status']); ?></td></tr>
+            <tr><th style="padding: 10px; border-bottom: 1px solid #eee;">Full Name:</th><td style="padding: 10px; border-bottom: 1px solid #eee;"><?php echo e($guard['full_name']); ?></td></tr>
+            <tr><th style="padding: 10px; border-bottom: 1px solid #eee;">Email:</th><td style="padding: 10px; border-bottom: 1px solid #eee;"><?php echo e($guard['email']); ?></td></tr>
+            <tr><th style="padding: 10px; border-bottom: 1px solid #eee;">Phone:</th><td style="padding: 10px; border-bottom: 1px solid #eee;"><?php echo e($guard['phone']); ?></td></tr>
+            <tr><th style="padding: 10px; border-bottom: 1px solid #eee;">Location:</th><td style="padding: 10px; border-bottom: 1px solid #eee;"><?php echo e($guard['location']); ?></td></tr>
+            <tr><th style="padding: 10px; border-bottom: 1px solid #eee;">Experience:</th><td style="padding: 10px; border-bottom: 1px solid #eee;"><?php echo e($guard['experience']); ?> years</td></tr>
+            <tr><th style="padding: 10px;">Status:</th><td style="padding: 10px;"><?php echo e(ucfirst($guard['verification_status'])); ?></td></tr>
         </table>
     </div>
 

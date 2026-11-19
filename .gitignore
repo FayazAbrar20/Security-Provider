@@ -1,0 +1,9 @@
+# Photos uploaded by guards are user data: keep them out of the repository.
+Project01/uploads/guards/*
+!Project01/uploads/guards/.gitkeep
+
+# Editor / OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

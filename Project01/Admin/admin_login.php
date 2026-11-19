@@ -1,34 +1,25 @@
 <?php
-session_start();
 include "../db.php";
 
 $error = "";
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    $email = mysqli_real_escape_string($conn, trim($_POST["email"] ?? ""));
+    $email = trim($_POST["email"] ?? "");
     $password = $_POST["password"] ?? "";
 
     if ($email === "" || $password === "") {
         $error = "Email and Password are required.";
     } else {
-        // Only allow admin login
-        $sql = "SELECT user_id, email, password, role
-                FROM users
-                WHERE email='$email' AND role='admin'
-                LIMIT 1";
-        $result = mysqli_query($conn, $sql);
-        $user = $result ? mysqli_fetch_assoc($result) : null;
+        $user = db_one($conn,
+            "SELECT user_id, email, password, role FROM users WHERE email = ? AND role = 'admin' LIMIT 1",
+            [$email]);
 
-        // Verify hashed password
         if ($user && password_verify($password, $user["password"])) {
-            $_SESSION["user_id"] = $user["user_id"];
-            $_SESSION["role"] = $user["role"]; // 'admin'
-
+            login_user($user);
             header("Location: admin_dashboard.php");
             exit();
-        } else {
-            $error = "Invalid admin email or password.";
         }
+        $error = "Invalid admin email or password.";
     }
 }
 ?>
@@ -140,12 +131,13 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     </nav>
 
     <?php if ($error): ?>
-        <div class="error-box"><?php echo $error; ?></div>
+        <div class="error-box"><?php echo e($error); ?></div>
     <?php endif; ?>
 
     <section class="form">
         <!-- IMPORTANT: POST + name attributes -->
         <form method="POST" action="admin_login.php">
+<?php echo csrf_field(); ?>
             <h3>
                 <div class="row">
                     <label for="email"><b>Email</b></label>

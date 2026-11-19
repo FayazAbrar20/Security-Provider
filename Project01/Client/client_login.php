@@ -1,52 +1,35 @@
 <?php
-session_start();
 include "../db.php";
 
-// Auto login using cookie
-if (!isset($_SESSION['user_id']) && isset($_COOKIE['remember_client'])) {
-    $user_id = mysqli_real_escape_string($conn, $_COOKIE['remember_client']);
-    $sql = "SELECT * FROM users WHERE user_id='$user_id' AND role='client'";
-    $result = mysqli_query($conn, $sql);
-
-    if (mysqli_num_rows($result) === 1) {
-        $user = mysqli_fetch_assoc($result);
-        $_SESSION['user_id'] = $user['user_id'];
-        $_SESSION['email'] = $user['email'];
-        $_SESSION['role'] = $user['role'];
-        header("Location: client_dashboard.php");
-        exit();
-    }
+// Already logged in, or a valid remember-me cookie: go to the dashboard.
+if ((isset($_SESSION['user_id']) && ($_SESSION['role'] ?? '') === 'client')
+    || remember_login($conn, 'remember_client', 'client')) {
+    header("Location: client_dashboard.php");
+    exit();
 }
 
-// Login submit
 $error = "";
 if (isset($_POST['login'])) {
-    $email = mysqli_real_escape_string($conn, $_POST['email']);
-    $password = $_POST['password'];
+    $email = trim($_POST['email'] ?? '');
+    $password = $_POST['password'] ?? '';
     $remember = isset($_POST['remember']);
 
-    $sql = "SELECT * FROM users WHERE email='$email' AND role='client'";
-    $result = mysqli_query($conn, $sql);
+    $user = db_one($conn,
+        "SELECT user_id, email, password, role FROM users WHERE email = ? AND role = 'client' LIMIT 1",
+        [$email]);
 
-    if (mysqli_num_rows($result) === 1) {
-        $user = mysqli_fetch_assoc($result);
+    if ($user && password_verify($password, $user['password'])) {
+        login_user($user);
 
-        if (password_verify($password, $user['password'])) {
-            $_SESSION['user_id'] = $user['user_id'];
-            $_SESSION['email'] = $user['email'];
-            $_SESSION['role'] = $user['role'];
-
-            // Auto login cookie
-            if ($remember) {
-                setcookie("remember_client", $user['user_id'], time() + (86400 * 7), "/");
-            }
-
-            // Remember email for UX
-            setcookie("remember_email", $email, time() + (86400 * 30), "/");
-
-            header("Location: client_dashboard.php");
-            exit();
+        if ($remember) {
+            remember_issue($conn, (int)$user['user_id'], 'remember_client');
         }
+
+        // Remember the email (not the password) to pre-fill the form next time.
+        setcookie("remember_email", $email, ['expires' => time() + 86400 * 30, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax']);
+
+        header("Location: client_dashboard.php");
+        exit();
     }
 
     $error = "Invalid email or password!";
@@ -135,13 +118,14 @@ if (isset($_POST['login'])) {
     <h2>Client Login</h2>
 
     <?php if ($error): ?>
-        <div class="error"><?php echo $error; ?></div>
+        <div class="error"><?php echo e($error); ?></div>
     <?php endif; ?>
 
     <form method="post">
+<?php echo csrf_field(); ?>
         <label>Email</label>
         <input type="email" name="email"
-               value="<?php echo $_COOKIE['remember_email'] ?? ''; ?>" required>
+               value="<?php echo e($_COOKIE['remember_email'] ?? ''); ?>" required>
 
         <label>Password</label>
         <input type="password" name="password" required>

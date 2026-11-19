@@ -9,94 +9,109 @@ $showPopup = isset($_GET['registered']) && $_GET['registered'] === '1';
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     /* ===============================
-      BASIC USER DATA
+      VALIDATE FORM FIELDS
     =============================== */
-    $email    = mysqli_real_escape_string($conn, $_POST['email']);
-    $password = password_hash($_POST['password'], PASSWORD_DEFAULT);
+    $email       = trim($_POST['email'] ?? '');
+    $password    = $_POST['password'] ?? '';
+    $full_name   = trim($_POST['full_name'] ?? '');
+    $phone       = trim($_POST['phone'] ?? '');
+    $location    = trim($_POST['location'] ?? '');
+    $experience  = (int)($_POST['experience'] ?? 0);
+    $skills      = trim($_POST['skills'] ?? '');
+    $hourly_rate = (float)($_POST['hourly_rate'] ?? 0);
+    $specialties = trim($_POST['specialties'] ?? '');
+
+    if ($email === '' || $password === '' || $full_name === '' || $phone === '' || $location === '') {
+        $error = "Please fill in all required fields.";
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error = "Invalid email format.";
+    } elseif (($problem = password_problem($password)) !== '') {
+        $error = $problem;
+    } elseif (!preg_match("/^[a-zA-Z-' ]{2,100}$/", $full_name)) {
+        $error = "Full name: only letters, spaces, - and ' allowed.";
+    } elseif (!preg_match("/^[0-9]{10,15}$/", $phone)) {
+        $error = "Invalid phone number (10-15 digits).";
+    } elseif ($experience < 0 || $experience > 60) {
+        $error = "Experience must be between 0 and 60 years.";
+    } elseif ($hourly_rate <= 0) {
+        $error = "Hourly rate must be greater than 0.";
+    } elseif (db_one($conn, "SELECT user_id FROM users WHERE email = ? LIMIT 1", [$email])) {
+        $error = "This email is already registered.";
+    }
 
     /* ===============================
-      IMAGE UPLOAD (FIXED & CLEAN)
+      IMAGE UPLOAD
       Uploads to: Project01/uploads/guards/
-      DB stores: uploads/guards/filename.jpg
+      DB stores: uploads/guards/<random>.<ext>
     =============================== */
-    if (empty($_FILES['profile_image']['name'])) {
-        $error = "Profile image is required.";
-    } else {
+    $image_path = "";
+    $target_fs = "";
+    if ($error === "") {
+        $file = $_FILES['profile_image'] ?? null;
+        $allowedTypes = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_GIF => 'gif'];
 
-        // Project root (one level up from Guard/)
-        $project_root = realpath(__DIR__ . "/..");
-
-        // Filesystem path
-        $upload_dir_fs = $project_root . "/uploads/guards/";
-
-        // DB / web path
-        $upload_dir_db = "uploads/guards/";
-
-        if (!is_dir($upload_dir_fs)) {
-            mkdir($upload_dir_fs, 0775, true);
-        }
-
-        $original_name = $_FILES['profile_image']['name'];
-        $ext = strtolower(pathinfo($original_name, PATHINFO_EXTENSION));
-        $allowed = ['jpg', 'jpeg', 'png', 'gif'];
-
-        if (!in_array($ext, $allowed)) {
-            $error = "Only JPG, JPEG, PNG, GIF images are allowed.";
+        if (!$file || ($file['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) {
+            $error = "Profile image is required.";
+        } elseif ($file['error'] !== UPLOAD_ERR_OK) {
+            $error = "Image upload failed. Please try again.";
+        } elseif ($file['size'] > 2 * 1024 * 1024) {
+            $error = "Image must be 2 MB or smaller.";
         } else {
+            // Check the file's actual content, not just its name.
+            $info = @getimagesize($file['tmp_name']);
+            $type = $info[2] ?? null;
 
-            // IMPORTANT: sanitize filename ONCE
-            $safe_name = preg_replace('/[^a-zA-Z0-9\._-]/', '_', $original_name);
-            $image_name = time() . "_" . $safe_name;
-
-            $target_fs = $upload_dir_fs . $image_name;
-
-            if (!move_uploaded_file($_FILES['profile_image']['tmp_name'], $target_fs)) {
-                $error = "Image upload failed. Check folder permission.";
+            if (!isset($allowedTypes[$type])) {
+                $error = "Only JPG, PNG and GIF images are allowed.";
             } else {
-                // THIS is what goes into DB
-                $image_path = $upload_dir_db . $image_name;
+                $upload_dir_fs = realpath(__DIR__ . "/..") . "/uploads/guards/";
+                if (!is_dir($upload_dir_fs)) {
+                    mkdir($upload_dir_fs, 0775, true);
+                }
+
+                // Random file name: the original name is never used on disk.
+                $image_name = bin2hex(random_bytes(16)) . "." . $allowedTypes[$type];
+                $target_fs = $upload_dir_fs . $image_name;
+
+                if (!move_uploaded_file($file['tmp_name'], $target_fs)) {
+                    $error = "Image upload failed. Please try again.";
+                } else {
+                    $image_path = "uploads/guards/" . $image_name;
+                }
             }
         }
     }
 
     /* ===============================
-      DATABASE INSERT
+      DATABASE INSERT (both rows or neither)
     =============================== */
     if ($error === "") {
+        mysqli_begin_transaction($conn);
 
-        // Insert into users
-        $sql1 = "INSERT INTO users (email, password, role, created_at)
-                 VALUES ('$email', '$password', 'guard', NOW())";
+        $ok = db_query($conn,
+            "INSERT INTO users (email, password, role, created_at) VALUES (?, ?, 'guard', NOW())",
+            [$email, password_hash($password, PASSWORD_DEFAULT)]);
 
-        if (!mysqli_query($conn, $sql1)) {
-            $error = "User registration failed: " . mysqli_error($conn);
-        } else {
-
+        if ($ok) {
             $user_id = mysqli_insert_id($conn);
-
-            // Guard details
-            $full_name   = mysqli_real_escape_string($conn, $_POST['full_name']);
-            $phone       = mysqli_real_escape_string($conn, $_POST['phone']);
-            $location    = mysqli_real_escape_string($conn, $_POST['location']);
-            $experience  = (int)$_POST['experience'];
-            $skills      = mysqli_real_escape_string($conn, $_POST['skills']);
-            $hourly_rate = (float)$_POST['hourly_rate'];
-            $specialties = mysqli_real_escape_string($conn, $_POST['specialties']);
-
-            $sql2 = "INSERT INTO guards
+            $ok = db_query($conn,
+                "INSERT INTO guards
                     (user_id, full_name, phone, location, experience, skills, hourly_rate, specialties, profile_image, verification_status, created_at)
-                    VALUES
-                    ('$user_id', '$full_name', '$phone', '$location', '$experience', '$skills', '$hourly_rate', '$specialties', '$image_path', 'pending', NOW())";
-
-            if (!mysqli_query($conn, $sql2)) {
-                // rollback user
-                mysqli_query($conn, "DELETE FROM users WHERE user_id='$user_id'");
-                $error = "Guard registration failed: " . mysqli_error($conn);
-            } else {
-                header("Location: guard_register.php?registered=1");
-                exit();
-            }
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', NOW())",
+                [$user_id, $full_name, $phone, $location, $experience, $skills, $hourly_rate, $specialties, $image_path]);
         }
+
+        if ($ok) {
+            mysqli_commit($conn);
+            header("Location: guard_register.php?registered=1");
+            exit();
+        }
+
+        mysqli_rollback($conn);
+        if ($target_fs !== "" && is_file($target_fs)) {
+            unlink($target_fs);
+        }
+        $error = "Registration failed. Please try again.";
     }
 }
 ?>
@@ -291,10 +306,11 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     
     <div class="register-form">
         <?php if ($error): ?>
-            <div class="error"><?php echo $error; ?></div>
+            <div class="error"><?php echo e($error); ?></div>
         <?php endif; ?>
 
         <form method="post" enctype="multipart/form-data">
+<?php echo csrf_field(); ?>
             <div class="form-group">
                 <label class="form-label">Full Name</label>
                 <input type="text" name="full_name" class="form-control" required>

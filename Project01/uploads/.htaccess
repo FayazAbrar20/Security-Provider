@@ -1,0 +1,5 @@
+# Uploaded files are data, never code: block scripts and directory listings here.
+Options -Indexes
+<FilesMatch "\.(php|php\d|phtml|phar|pl|py|cgi|sh)$">
+    Require all denied
+</FilesMatch>

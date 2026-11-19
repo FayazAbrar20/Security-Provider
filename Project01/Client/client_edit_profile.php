@@ -1,5 +1,4 @@
 <?php
-session_start();
 include "../db.php";
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'client') {
@@ -8,41 +7,39 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'client') {
 }
 
 $user_id = $_SESSION['user_id'];
-
-$sql = "SELECT c.* FROM clients c WHERE c.user_id='$user_id'";
-$result = mysqli_query($conn, $sql);
-$client = mysqli_fetch_assoc($result);
+$client = db_one($conn, "SELECT c.* FROM clients c WHERE c.user_id = ?", [$user_id]);
 
 $nameErr = $phoneErr = "";
 $success = "";
+$allowedOrgTypes = ['home', 'industry', 'individual'];
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $valid = true;
 
-    $name = mysqli_real_escape_string($conn, trim($_POST["name"]));
-    $phone = mysqli_real_escape_string($conn, trim($_POST["phone"]));
-    $address = mysqli_real_escape_string($conn, trim($_POST["address"]));
-    $org_type = mysqli_real_escape_string($conn, $_POST["org_type"]);
+    $name = trim($_POST["name"] ?? "");
+    $phone = trim($_POST["phone"] ?? "");
+    $address = trim($_POST["address"] ?? "");
+    $org_type = $_POST["org_type"] ?? "";
+    if (!in_array($org_type, $allowedOrgTypes, true)) {
+        $org_type = $client['organization_type'] ?? 'individual';
+    }
 
-    if (empty($name)) {
-        $nameErr = "Name is required";
+    if (!preg_match("/^[a-zA-Z-' ]{2,100}$/", $name)) {
+        $nameErr = "Name is required (letters, spaces, - and ' only)";
         $valid = false;
     }
 
-    if (empty($phone) || !preg_match("/^[0-9]{10,15}$/", $phone)) {
+    if (!preg_match("/^[0-9]{10,15}$/", $phone)) {
         $phoneErr = "Invalid phone number";
         $valid = false;
     }
 
     if ($valid) {
-        $sql = "UPDATE clients SET
-                full_name='$name',
-                phone='$phone',
-                address='$address',
-                organization_type='$org_type'
-                WHERE user_id='$user_id'";
+        $ok = db_query($conn,
+            "UPDATE clients SET full_name = ?, phone = ?, address = ?, organization_type = ? WHERE user_id = ?",
+            [$name, $phone, $address, $org_type, $user_id]);
 
-        if (mysqli_query($conn, $sql)) {
+        if ($ok) {
             $success = "Profile updated successfully!";
             $client['full_name'] = $name;
             $client['phone'] = $phone;
@@ -145,25 +142,26 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <h2>Edit Profile</h2>
 
     <?php if ($success): ?>
-        <div class="success"><?php echo $success; ?></div>
+        <div class="success"><?php echo e($success); ?></div>
     <?php endif; ?>
 
     <form method="post">
+<?php echo csrf_field(); ?>
         <div class="field">
             <label>Full Name:</label>
-            <input type="text" name="name" value="<?php echo $client['full_name']; ?>">
-            <span class="error"><?php echo $nameErr; ?></span>
+            <input type="text" name="name" value="<?php echo e($client['full_name']); ?>">
+            <span class="error"><?php echo e($nameErr); ?></span>
         </div>
 
         <div class="field">
             <label>Phone:</label>
-            <input type="text" name="phone" value="<?php echo $client['phone']; ?>">
-            <span class="error"><?php echo $phoneErr; ?></span>
+            <input type="text" name="phone" value="<?php echo e($client['phone']); ?>">
+            <span class="error"><?php echo e($phoneErr); ?></span>
         </div>
 
         <div class="field">
             <label>Address:</label>
-            <textarea name="address" rows="3"><?php echo $client['address']; ?></textarea>
+            <textarea name="address" rows="3"><?php echo e($client['address']); ?></textarea>
         </div>
 
         <div class="field">

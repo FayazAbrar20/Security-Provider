@@ -1,54 +1,35 @@
 <?php
-session_start();
 include "../db.php";
 
-
-// Auto login using cookie
-if (!isset($_SESSION['user_id']) && isset($_COOKIE['remember_guard'])) {
-    $user_id = mysqli_real_escape_string($conn, $_COOKIE['remember_guard']);
-    $sql = "SELECT * FROM users WHERE user_id='$user_id' AND role='guard'";
-    $result = mysqli_query($conn, $sql);
-
-    if (mysqli_num_rows($result) === 1) {
-        $user = mysqli_fetch_assoc($result);
-        $_SESSION['user_id'] = $user['user_id'];
-        $_SESSION['email'] = $user['email'];
-        $_SESSION['role'] = $user['role'];
-        header("Location: guard_dashboard.php");
-        exit();
-    }
+// Already logged in, or a valid remember-me cookie: go to the dashboard.
+if ((isset($_SESSION['user_id']) && ($_SESSION['role'] ?? '') === 'guard')
+    || remember_login($conn, 'remember_guard', 'guard')) {
+    header("Location: guard_dashboard.php");
+    exit();
 }
 
-
-// Login submit
 $error = "";
 if (isset($_POST['login'])) {
-    $email = mysqli_real_escape_string($conn, $_POST['email']);
-    $password = $_POST['password'];
+    $email = trim($_POST['email'] ?? '');
+    $password = $_POST['password'] ?? '';
     $remember = isset($_POST['remember']);
 
-    $sql = "SELECT * FROM users WHERE email='$email' AND role='guard'";
-    $result = mysqli_query($conn, $sql);
+    $user = db_one($conn,
+        "SELECT user_id, email, password, role FROM users WHERE email = ? AND role = 'guard' LIMIT 1",
+        [$email]);
 
-    if (mysqli_num_rows($result) === 1) {
-        $user = mysqli_fetch_assoc($result);
+    if ($user && password_verify($password, $user['password'])) {
+        login_user($user);
 
-        if (password_verify($password, $user['password'])) {
-            $_SESSION['user_id'] = $user['user_id'];
-            $_SESSION['email'] = $user['email'];
-            $_SESSION['role'] = $user['role'];
-
-            // Auto login cookie
-            if ($remember) {
-                setcookie("remember_guard", $user['user_id'], time() + (86400 * 7), "/");
-            }
-
-            // Remember email for UX
-            setcookie("remember_email_guard", $email, time() + (86400 * 30), "/");
-
-            header("Location: guard_dashboard.php");
-            exit();
+        if ($remember) {
+            remember_issue($conn, (int)$user['user_id'], 'remember_guard');
         }
+
+        // Remember the email (not the password) to pre-fill the form next time.
+        setcookie("remember_email_guard", $email, ['expires' => time() + 86400 * 30, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax']);
+
+        header("Location: guard_dashboard.php");
+        exit();
     }
 
     $error = "Invalid email or password!";
@@ -206,10 +187,11 @@ if (isset($_POST['login'])) {
     </div>
 
     <?php if ($error): ?>
-        <div class="error"><?php echo $error; ?></div>
+        <div class="error"><?php echo e($error); ?></div>
     <?php endif; ?>
 
     <form method="post">
+<?php echo csrf_field(); ?>
         <div class="mb-3">
             <label class="form-label">Email Address</label>
             <input
@@ -217,7 +199,7 @@ if (isset($_POST['login'])) {
                 name="email"
                 class="form-control"
                 placeholder="Enter your email"
-                value="<?php echo $_COOKIE['remember_email_guard'] ?? ''; ?>"
+                value="<?php echo e($_COOKIE['remember_email_guard'] ?? ''); ?>"
                 required
             >
         </div>

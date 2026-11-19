@@ -1,5 +1,4 @@
 <?php
-    session_start();
     include "../db.php";
 
     if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'client') {
@@ -7,32 +6,48 @@
         exit();
     }
 
-    $user_id = $_SESSION['user_id']; 
-    $guard_id = $_GET['guard_id'] ?? null;
+    // Booking changes data, so it only happens through the POST form on the dashboard
+    // (which also carries the CSRF token). Opening this page by link does nothing.
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        header("Location: client_dashboard.php");
+        exit();
+    }
 
-    if (!$guard_id) {
+    $user_id  = $_SESSION['user_id'];
+    $guard_id = (int)($_POST['guard_id'] ?? 0);
+
+    if ($guard_id <= 0) {
         die("Guard not specified. <a href='client_dashboard.php'>Back to Dashboard</a>");
     }
 
-    $client_res = mysqli_query($conn, "SELECT id FROM clients WHERE user_id='$user_id'");
-    if (!$client_res || mysqli_num_rows($client_res) == 0) {
+    $client = db_one($conn, "SELECT id FROM clients WHERE user_id = ?", [$user_id]);
+    if (!$client) {
         die("Client not found.");
     }
-    $client = mysqli_fetch_assoc($client_res);
     $client_id = $client['id'];
 
-    $guard_res = mysqli_query($conn, "SELECT full_name FROM guards WHERE id='$guard_id' AND verification_status='approved'");
-    if (!$guard_res || mysqli_num_rows($guard_res) == 0) {
+    $guard = db_one($conn,
+        "SELECT full_name FROM guards WHERE id = ? AND verification_status = 'approved'",
+        [$guard_id]);
+    if (!$guard) {
         die("Guard not found or not approved. <a href='client_dashboard.php'>Back to Dashboard</a>");
     }
-    $guard = mysqli_fetch_assoc($guard_res);
 
-    $sql = "INSERT INTO bookings (client_id, guard_id, booking_date, hours, status) 
-            VALUES ('$client_id', '$guard_id', NOW(), 1, 'pending')";
+    // Do not create a second pending booking for the same guard.
+    $existing = db_one($conn,
+        "SELECT id FROM bookings WHERE client_id = ? AND guard_id = ? AND status = 'pending' LIMIT 1",
+        [$client_id, $guard_id]);
 
     $success = false;
-    if (mysqli_query($conn, $sql)) {
+    $message = "";
+    if ($existing) {
+        $message = "You already have a pending booking with this guard.";
+    } elseif (db_query($conn,
+        "INSERT INTO bookings (client_id, guard_id, booking_date, hours, status) VALUES (?, ?, NOW(), 1, 'pending')",
+        [$client_id, $guard_id])) {
         $success = true;
+    } else {
+        $message = "Booking failed. Please try again.";
     }
 ?>
 
@@ -73,8 +88,8 @@
             <h2>Guard "<?php echo htmlspecialchars($guard['full_name']); ?>" booked successfully!</h2>
             <p>Your booking status is <strong>Pending</strong>.</p>
         <?php else: ?>
-            <h2>Error booking guard.</h2>
-            <p><?php echo mysqli_error($conn); ?></p>
+            <h2>Could not book this guard.</h2>
+            <p><?php echo e($message); ?></p>
         <?php endif; ?>
 
         <a href="client_dashboard.php" class="btn">Back to Dashboard</a>

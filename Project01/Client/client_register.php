@@ -4,98 +4,91 @@ include "../db.php";
 $nameErr = $emailErr = $phoneErr = $passwordErr = $confirmErr = "";
 $name = $email = $phone = $password = $confirm = $address = $org_type = "";
 $success = "";
+$allowedOrgTypes = ['home', 'industry', 'individual'];
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $valid = true;
 
-    // Validate Full Name
-    if (empty($_POST["name"])) {
+    // Full name
+    $name = trim($_POST["name"] ?? "");
+    if ($name === "") {
         $nameErr = "Name is required";
         $valid = false;
-    } else {
-        $name = mysqli_real_escape_string($conn, trim($_POST["name"]));
-        if (!preg_match("/^[a-zA-Z-' ]*$/", $name)) {
-            $nameErr = "Only letters and white space allowed";
-            $valid = false;
-        }
+    } elseif (!preg_match("/^[a-zA-Z-' ]{2,100}$/", $name)) {
+        $nameErr = "Only letters, spaces, - and ' allowed (2-100 characters)";
+        $valid = false;
     }
 
-    // Validate Email
-    if (empty($_POST["email"])) {
+    // Email
+    $email = trim($_POST["email"] ?? "");
+    if ($email === "") {
         $emailErr = "Email is required";
         $valid = false;
-    } else {
-        $email = mysqli_real_escape_string($conn, trim($_POST["email"]));
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            $emailErr = "Invalid email format";
-            $valid = false;
-        } else {
-            $check = mysqli_query($conn, "SELECT * FROM users WHERE email='$email'");
-            if (mysqli_num_rows($check) > 0) {
-                $emailErr = "Email already registered";
-                $valid = false;
-            }
-        }
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $emailErr = "Invalid email format";
+        $valid = false;
+    } elseif (db_one($conn, "SELECT user_id FROM users WHERE email = ? LIMIT 1", [$email])) {
+        $emailErr = "Email already registered";
+        $valid = false;
     }
 
-    // Validate Phone
-    if (empty($_POST["phone"])) {
+    // Phone
+    $phone = trim($_POST["phone"] ?? "");
+    if ($phone === "") {
         $phoneErr = "Phone is required";
         $valid = false;
-    } else {
-        $phone = mysqli_real_escape_string($conn, trim($_POST["phone"]));
-        if (!preg_match("/^[0-9]{10,15}$/", $phone)) {
-            $phoneErr = "Invalid phone number (10-15 digits)";
-            $valid = false;
-        }
+    } elseif (!preg_match("/^[0-9]{10,15}$/", $phone)) {
+        $phoneErr = "Invalid phone number (10-15 digits)";
+        $valid = false;
     }
 
-    // Validate Password
-    if (empty($_POST["password"])) {
+    // Password
+    $password = $_POST["password"] ?? "";
+    if ($password === "") {
         $passwordErr = "Password is required";
         $valid = false;
-    } else {
-        $password = $_POST["password"];
-        if (strlen($password) < 6) {
-            $passwordErr = "Password must be at least 6 characters";
-            $valid = false;
-        }
+    } elseif (($problem = password_problem($password)) !== "") {
+        $passwordErr = $problem;
+        $valid = false;
     }
 
-    // Validate Confirm Password
-    if (empty($_POST["confirm"])) {
+    // Confirm password
+    $confirm = $_POST["confirm"] ?? "";
+    if ($confirm === "") {
         $confirmErr = "Please confirm password";
         $valid = false;
-    } else {
-        $confirm = $_POST["confirm"];
-        if ($password !== $confirm) {
-            $confirmErr = "Passwords do not match";
-            $valid = false;
-        }
+    } elseif ($password !== $confirm) {
+        $confirmErr = "Passwords do not match";
+        $valid = false;
     }
 
-    $address = mysqli_real_escape_string($conn, trim($_POST["address"]));
-    $org_type = mysqli_real_escape_string($conn, $_POST["org_type"]);
+    $address = trim($_POST["address"] ?? "");
+    $org_type = $_POST["org_type"] ?? "";
+    if (!in_array($org_type, $allowedOrgTypes, true)) {
+        $org_type = "individual";
+    }
 
-    // If all validations pass
     if ($valid) {
-        $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+        // Both rows are written together, or neither is.
+        mysqli_begin_transaction($conn);
+        $ok = db_query($conn,
+            "INSERT INTO users (email, password, role, created_at) VALUES (?, ?, 'client', NOW())",
+            [$email, password_hash($password, PASSWORD_DEFAULT)]);
 
-        $sql1 = "INSERT INTO users (email, password, role, created_at)
-                 VALUES ('$email', '$hashed_password', 'client', NOW())";
-
-        if (mysqli_query($conn, $sql1)) {
+        if ($ok) {
             $user_id = mysqli_insert_id($conn);
+            $ok = db_query($conn,
+                "INSERT INTO clients (user_id, full_name, phone, address, organization_type, created_at)
+                 VALUES (?, ?, ?, ?, ?, NOW())",
+                [$user_id, $name, $phone, $address, $org_type]);
+        }
 
-            $sql2 = "INSERT INTO clients (user_id, full_name, phone, address, organization_type, created_at)
-                     VALUES ('$user_id', '$name', '$phone', '$address', '$org_type', NOW())";
-
-            if (mysqli_query($conn, $sql2)) {
-                $success = "Registration successful! You can now login.";
-                $name = $email = $phone = $address = "";
-                $org_type = "";
-            }
+        if ($ok) {
+            mysqli_commit($conn);
+            $success = "Registration successful! You can now login.";
+            $name = $email = $phone = $address = $org_type = "";
         } else {
+            mysqli_rollback($conn);
             $emailErr = "Registration failed. Please try again.";
         }
     }
@@ -191,24 +184,25 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <h2>Client Registration</h2>
 
     <?php if ($success): ?>
-        <div class="success"><?php echo $success; ?></div>
+        <div class="success"><?php echo e($success); ?></div>
     <?php endif; ?>
 
     <form method="post">
+<?php echo csrf_field(); ?>
         <label>Full Name <span class="required">*</span></label>
-        <input type="text" name="name" value="<?php echo $name; ?>">
-        <span class="error"><?php echo $nameErr; ?></span>
+        <input type="text" name="name" value="<?php echo e($name); ?>">
+        <span class="error"><?php echo e($nameErr); ?></span>
 
         <label>Email <span class="required">*</span></label>
-        <input type="email" name="email" value="<?php echo $email; ?>">
-        <span class="error"><?php echo $emailErr; ?></span>
+        <input type="email" name="email" value="<?php echo e($email); ?>">
+        <span class="error"><?php echo e($emailErr); ?></span>
 
         <label>Phone <span class="required">*</span></label>
-        <input type="text" name="phone" value="<?php echo $phone; ?>">
-        <span class="error"><?php echo $phoneErr; ?></span>
+        <input type="text" name="phone" value="<?php echo e($phone); ?>">
+        <span class="error"><?php echo e($phoneErr); ?></span>
 
         <label>Address</label>
-        <textarea name="address" rows="3"><?php echo $address; ?></textarea>
+        <textarea name="address" rows="3"><?php echo e($address); ?></textarea>
 
         <label>Organization Type</label>
         <select name="org_type">
@@ -220,11 +214,11 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
         <label>Password <span class="required">*</span></label>
         <input type="password" name="password">
-        <span class="error"><?php echo $passwordErr; ?></span>
+        <span class="error"><?php echo e($passwordErr); ?></span>
 
         <label>Confirm Password <span class="required">*</span></label>
         <input type="password" name="confirm">
-        <span class="error"><?php echo $confirmErr; ?></span>
+        <span class="error"><?php echo e($confirmErr); ?></span>
 
         <button type="submit">Register</button>
 

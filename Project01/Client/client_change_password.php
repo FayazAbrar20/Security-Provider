@@ -1,6 +1,5 @@
 <?php
-session_start();
-include "db.php";
+include "../db.php";
 
 if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'client') {
     header("Location: client_login.php");
@@ -15,22 +14,19 @@ $success = "";
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $valid = true;
 
-    $current = $_POST["current_password"];
-    $new = $_POST["new_password"];
-    $confirm = $_POST["confirm_password"];
+    $current = $_POST["current_password"] ?? "";
+    $new = $_POST["new_password"] ?? "";
+    $confirm = $_POST["confirm_password"] ?? "";
 
-    // Get current password from database
-    $sql = "SELECT password FROM users WHERE user_id='$user_id'";
-    $result = mysqli_query($conn, $sql);
-    $user = mysqli_fetch_assoc($result);
+    $user = db_one($conn, "SELECT password FROM users WHERE user_id = ?", [$user_id]);
 
-    if (!password_verify($current, $user['password'])) {
+    if (!$user || !password_verify($current, $user['password'])) {
         $currentErr = "Current password is incorrect";
         $valid = false;
     }
 
-    if (strlen($new) < 6) {
-        $newErr = "Password must be at least 6 characters";
+    if (($problem = password_problem($new)) !== "") {
+        $newErr = $problem;
         $valid = false;
     }
 
@@ -40,10 +36,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 
     if ($valid) {
-        $hashed = password_hash($new, PASSWORD_DEFAULT);
-        $sql = "UPDATE users SET password='$hashed' WHERE user_id='$user_id'";
-        
-        if (mysqli_query($conn, $sql)) {
+        if (db_query($conn, "UPDATE users SET password = ? WHERE user_id = ?",
+                     [password_hash($new, PASSWORD_DEFAULT), $user_id])) {
+            // Sign out every remembered device after a password change.
+            db_query($conn, "DELETE FROM remember_tokens WHERE user_id = ?", [$user_id]);
             $success = "Password changed successfully!";
         }
     }
@@ -73,26 +69,27 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     <h2 class="mb-4">Change Password</h2>
 
     <?php if ($success): ?>
-        <div class="success"><?php echo $success; ?></div>
+        <div class="success"><?php echo e($success); ?></div>
     <?php endif; ?>
 
     <form method="post">
+<?php echo csrf_field(); ?>
         <div class="mb-3">
             <label>Current Password:</label>
             <input type="password" name="current_password" class="form-control">
-            <span class="error"><?php echo $currentErr; ?></span>
+            <span class="error"><?php echo e($currentErr); ?></span>
         </div>
 
         <div class="mb-3">
             <label>New Password:</label>
             <input type="password" name="new_password" class="form-control">
-            <span class="error"><?php echo $newErr; ?></span>
+            <span class="error"><?php echo e($newErr); ?></span>
         </div>
 
         <div class="mb-3">
             <label>Confirm New Password:</label>
             <input type="password" name="confirm_password" class="form-control">
-            <span class="error"><?php echo $confirmErr; ?></span>
+            <span class="error"><?php echo e($confirmErr); ?></span>
         </div>
 
         <button type="submit" class="btn btn-warning">Change Password</button>

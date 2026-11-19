@@ -1,5 +1,4 @@
 <?php
-session_start();
 include "../db.php";
 
 // Admin-only access
@@ -10,36 +9,28 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
 
 $msg = "";
 
-// Approve / Reject action (POST, no JS)
+// Approve / Reject a pending guard application
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST["action"], $_POST["guard_id"])) {
-    $guard_id = (int)$_POST["guard_id"];
-    $action = $_POST["action"];
-
-    if ($action === "approve") {
-        $status = "approved";
-    } elseif ($action === "reject") {
-        $status = "rejected";
-    } else {
-        $status = "";
-    }
+    $statuses = ['approve' => 'approved', 'reject' => 'rejected'];
+    $status = $statuses[$_POST["action"]] ?? "";
 
     if ($status !== "") {
-        $sql = "UPDATE guards SET verification_status='$status' WHERE id='$guard_id' LIMIT 1";
-        if (mysqli_query($conn, $sql)) {
-            $msg = "Guard status updated to: " . htmlspecialchars($status);
+        if (db_query($conn, "UPDATE guards SET verification_status = ? WHERE id = ? LIMIT 1",
+                     [$status, (int)$_POST["guard_id"]])) {
+            $msg = "Guard status updated to: " . $status;
         } else {
-            $msg = "Database error: " . mysqli_error($conn);
+            $msg = "Could not update the guard. Please try again.";
         }
     }
 }
 
 // Load pending guards
-$pending_sql = "SELECT g.*, u.email
-                FROM guards g
-                JOIN users u ON u.user_id = g.user_id
-                WHERE g.verification_status='pending'
-                ORDER BY g.created_at DESC";
-$pending_result = mysqli_query($conn, $pending_sql);
+$pending_result = db_query($conn,
+    "SELECT g.*, u.email
+     FROM guards g
+     JOIN users u ON u.user_id = g.user_id
+     WHERE g.verification_status = 'pending'
+     ORDER BY g.created_at DESC");
 ?>
 
 <!DOCTYPE html>
@@ -159,7 +150,7 @@ $pending_result = mysqli_query($conn, $pending_sql);
             <strong>Admin Dashboard</strong>
             <div class="muted">Approve or reject guard registrations</div>
         </div>
-        <a href="../index.php">Logout</a>
+        <a href="admin_logout.php">Logout</a>
     </div>
 
     <div class="container">
@@ -167,7 +158,7 @@ $pending_result = mysqli_query($conn, $pending_sql);
             <h2>Pending Guard Requests</h2>
 
             <?php if ($msg): ?>
-                <div class="msg"><?php echo $msg; ?></div>
+                <div class="msg"><?php echo e($msg); ?></div>
             <?php endif; ?>
 
             <?php if (!$pending_result || mysqli_num_rows($pending_result) === 0): ?>
@@ -188,19 +179,19 @@ $pending_result = mysqli_query($conn, $pending_sql);
                     <tbody>
                         <?php while ($g = mysqli_fetch_assoc($pending_result)): ?>
                             <?php
-                                // Build image path (admin_dashboard.php is in root)
+                                // Images live in Project01/uploads/; this page is in Project01/Admin/.
                                 $img_src = "";
                                 if (!empty($g['profile_image'])) {
-                                    $fs = __DIR__ . "/" . $g['profile_image']; // filesystem for file_exists() [web:204]
+                                    $fs = dirname(__DIR__) . "/" . $g['profile_image'];
                                     if (file_exists($fs)) {
-                                        $img_src = $g['profile_image']; // browser path
+                                        $img_src = "../" . $g['profile_image'];
                                     }
                                 }
                             ?>
                             <tr>
                                 <td>
                                     <?php if ($img_src): ?>
-                                        <img class="guard-thumb" src="<?php echo $img_src; ?>" alt="Guard">
+                                        <img class="guard-thumb" src="<?php echo e($img_src); ?>" alt="Guard">
                                     <?php else: ?>
                                         <div class="muted">No image</div>
                                     <?php endif; ?>
@@ -229,12 +220,14 @@ $pending_result = mysqli_query($conn, $pending_sql);
                                 <td>
                                     <div class="actions">
                                         <form method="post">
+<?php echo csrf_field(); ?>
                                             <input type="hidden" name="guard_id" value="<?php echo (int)$g['id']; ?>">
                                             <input type="hidden" name="action" value="approve">
                                             <button type="submit" class="btn btn-approve">Approve</button>
                                         </form>
 
                                         <form method="post">
+<?php echo csrf_field(); ?>
                                             <input type="hidden" name="guard_id" value="<?php echo (int)$g['id']; ?>">
                                             <input type="hidden" name="action" value="reject">
                                             <button type="submit" class="btn btn-reject">Reject</button>
