@@ -35,113 +35,32 @@ if (isset($_POST['login'])) {
     $error = "Invalid email or password!";
 }
 ?>
+<?php auth_start('Client Login', 'Book verified security professionals in minutes.', '../', 'user'); ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Client Login</title>
-    <style>
-        body{
-            margin:0;
-            font-family: Arial, sans-serif;
-            background:#f3f3f3;
-            height:100vh;
-            display:flex;
-            justify-content:center;
-            align-items:center;
-        }
-        .box{
-            width:360px;
-            background:white;
-            border:1px solid #ccc;
-            padding:20px;
-        }
-        h2{
-            text-align:center;
-            margin-top:0;
-        }
-        label{
-            display:block;
-            margin-top:10px;
-            margin-bottom:5px;
-            font-size:14px;
-        }
-        input[type="email"], input[type="password"]{
-            width:100%;
-            padding:10px;
-            border:1px solid #aaa;
-            box-sizing:border-box;
-        }
-        .remember{
-            margin-top:10px;
-            font-size:14px;
-        }
-        button{
-            width:100%;
-            padding:10px;
-            margin-top:15px;
-            background:#333;
-            color:white;
-            border:none;
-            cursor:pointer;
-        }
-        button:hover{
-            background:#111;
-        }
-        .error{
-            background:#ffd6d6;
-            border:1px solid #ff9f9f;
-            color:#b30000;
-            padding:10px;
-            margin-bottom:10px;
-            text-align:center;
-            font-size:14px;
-        }
-        .link{
-            text-align:center;
-            margin-top:12px;
-            font-size:14px;
-        }
-        .link a{
-            color:blue;
-            text-decoration:none;
-        }
-        .link a:hover{
-            text-decoration:underline;
-        }
-    </style>
-</head>
-<body>
+            <?php if ($error): ?>
+                <div class="alert alert-error"><?php echo e($error); ?></div>
+            <?php endif; ?>
+            <?php if (isset($_GET['reset'])): ?>
+                <div class="alert alert-ok">Password updated. You can log in now.</div>
+            <?php endif; ?>
 
-<div class="box">
-    <h2>Client Login</h2>
+            <form method="post">
+                <?php echo csrf_field(); ?>
+                <div class="field">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" placeholder="you@example.com"
+                           value="<?php echo e($_COOKIE['remember_email'] ?? ''); ?>" required>
+                </div>
+                <div class="field">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" placeholder="Your password" required>
+                </div>
+                <div class="row-between">
+                    <label class="check"><input type="checkbox" name="remember"> Remember me</label>
+                    <a href="../forgot_password.php?role=client">Forgot password?</a>
+                </div>
+                <button type="submit" name="login" class="btn-gold">Log in</button>
+            </form>
 
-    <?php if ($error): ?>
-        <div class="error"><?php echo e($error); ?></div>
-    <?php endif; ?>
-
-    <form method="post">
-<?php echo csrf_field(); ?>
-        <label>Email</label>
-        <input type="email" name="email"
-               value="<?php echo e($_COOKIE['remember_email'] ?? ''); ?>" required>
-
-        <label>Password</label>
-        <input type="password" name="password" required>
-
-        <div class="remember">
-            <input type="checkbox" name="remember" id="remember">
-            <label for="remember" style="display:inline;">Remember Me</label>
-        </div>
-
-        <button type="submit" name="login">Login</button>
-
-        <div class="link">
-            Don't have an account? <a href="client_register.php">Register here</a>
-        </div>
-    </form>
-</div>
-
-</body>
-</html>
+            <p class="auth-foot">New here? <a href="client_register.php">Create a client account</a></p>
+<?php auth_end(); ?>

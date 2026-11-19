@@ -45,57 +45,31 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 }
 ?>
+<?php auth_start('Change Password', 'Use at least 8 characters with letters and numbers.', '../', 'lock'); ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>Change Password</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        .error { color: #dc3545; font-size: 14px; }
-        .success { 
-            color: #28a745; 
-            padding: 10px; 
-            background: #d4edda; 
-            border-radius: 5px; 
-            margin-bottom: 15px; 
-        }
-    </style>
-</head>
-<body style="padding:50px">
+            <?php if ($success): ?>
+                <div class="alert alert-ok"><?php echo e($success); ?></div>
+            <?php endif; ?>
 
-<div class="container" style="max-width:500px">
-    <h2 class="mb-4">Change Password</h2>
+            <form method="post">
+                <?php echo csrf_field(); ?>
+                <div class="field">
+                    <label for="current_password">Current password</label>
+                    <input type="password" id="current_password" name="current_password" required>
+                    <span class="error"><?php echo e($currentErr); ?></span>
+                </div>
+                <div class="field">
+                    <label for="new_password">New password</label>
+                    <input type="password" id="new_password" name="new_password" required>
+                    <span class="error"><?php echo e($newErr); ?></span>
+                </div>
+                <div class="field">
+                    <label for="confirm_password">Confirm new password</label>
+                    <input type="password" id="confirm_password" name="confirm_password" required>
+                    <span class="error"><?php echo e($confirmErr); ?></span>
+                </div>
+                <button type="submit" class="btn-gold">Update password</button>
+            </form>
 
-    <?php if ($success): ?>
-        <div class="success"><?php echo e($success); ?></div>
-    <?php endif; ?>
-
-    <form method="post">
-<?php echo csrf_field(); ?>
-        <div class="mb-3">
-            <label>Current Password:</label>
-            <input type="password" name="current_password" class="form-control">
-            <span class="error"><?php echo e($currentErr); ?></span>
-        </div>
-
-        <div class="mb-3">
-            <label>New Password:</label>
-            <input type="password" name="new_password" class="form-control">
-            <span class="error"><?php echo e($newErr); ?></span>
-        </div>
-
-        <div class="mb-3">
-            <label>Confirm New Password:</label>
-            <input type="password" name="confirm_password" class="form-control">
-            <span class="error"><?php echo e($confirmErr); ?></span>
-        </div>
-
-        <button type="submit" class="btn btn-warning">Change Password</button>
-        <a href="client_profile.php" class="btn btn-secondary">Cancel</a>
-    </form>
-</div>
-
-</body>
-</html>
+            <p class="auth-foot"><a href="client_dashboard.php">&larr; Back to dashboard</a></p>
+<?php auth_end(); ?>

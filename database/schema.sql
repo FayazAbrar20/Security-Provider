@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS users (
     email      VARCHAR(255) NOT NULL UNIQUE,
     password   VARCHAR(255) NOT NULL,                -- password_hash() output
     role       ENUM('admin', 'guard', 'client') NOT NULL,
+    recovery_hash VARCHAR(255) NULL,                 -- admins only: hash of the recovery key
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
@@ -67,6 +68,16 @@ CREATE TABLE IF NOT EXISTS remember_tokens (
     validator_hash CHAR(64) NOT NULL,
     expires_at     DATETIME NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- Failed "forgot password" identity checks, used to block repeated guessing.
+CREATE TABLE IF NOT EXISTS password_reset_attempts (
+    id           INT AUTO_INCREMENT PRIMARY KEY,
+    email        VARCHAR(255) NOT NULL,
+    ip           VARCHAR(45)  NOT NULL,
+    attempted_at DATETIME NOT NULL,
+    INDEX (email),
+    INDEX (ip, attempted_at)
 ) ENGINE=InnoDB;
 
 -- First admin: open Admin/admin_registration.php once. After the first admin exists,

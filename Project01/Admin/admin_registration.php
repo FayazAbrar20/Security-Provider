@@ -14,6 +14,7 @@ if ($adminCount > 0 && !$isAdmin) {
 
 $error = "";
 $success = "";
+$recoveryKey = "";
 
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
@@ -32,180 +33,58 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     } elseif (db_one($conn, "SELECT user_id FROM users WHERE email = ? LIMIT 1", [$email])) {
         $error = "This email is already registered.";
     } else {
+        // Admins have no phone or name on file, so a one-time recovery key is how they prove
+        // who they are on the "forgot password" page. Only its hash is stored.
+        $recoveryKey = new_recovery_key();
         $ok = db_query($conn,
-            "INSERT INTO users (email, password, role, created_at) VALUES (?, ?, 'admin', NOW())",
-            [$email, password_hash($password, PASSWORD_DEFAULT)]);
+            "INSERT INTO users (email, password, role, recovery_hash, created_at) VALUES (?, ?, 'admin', ?, NOW())",
+            [$email, password_hash($password, PASSWORD_DEFAULT), password_hash($recoveryKey, PASSWORD_DEFAULT)]);
 
         if ($ok) {
             $success = "Admin registration successful! You can login now.";
         } else {
+            $recoveryKey = "";
             $error = "Registration failed. Please try again.";
         }
     }
 }
 ?>
-
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Security Provider - Admin Registration</title>
-    <link rel="stylesheet" href=".//registration.css">
-    <style>
-        .navbar {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 10px 40px;
-            position: sticky;
-            top: 0;
-            background: rgba(16, 15, 15, 0.3);
-            backdrop-filter: blur(10px);
-            z-index: 1000;
-            color: white;
-        }
-
-        body {
-            background-image: url("https://bc-user-uploads.brandcrowd.com/public/media-Production/84cb8f0c-efa9-43e9-9f06-bd99bde7b0f2/27cb0a83-1706-4400-8ec0-a8aa65293eb2.jpg");
-            background-size: cover;
-            background-position: center;
-            background-repeat: no-repeat;
-            background-attachment: fixed;
-            color: white;
-            margin-bottom: 0;
-            font-family: 'Claus Eggers Sørensen', sans-serif;
-        }
-
-        .form1 {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            height: 85vh;
-            text-align: center;
-            font-size: 22px;
-        }
-
-        .card {
-            width: 520px;
-            max-width: 92%;
-            background: rgba(0,0,0,0.45);
-            border: 1px solid rgba(255,255,255,0.2);
-            border-radius: 18px;
-            padding: 25px 25px 18px;
-            backdrop-filter: blur(6px);
-        }
-
-        .row {
-            display: flex;
-            justify-content: space-between;
-            margin: 12px 0;
-            align-items: center;
-            gap: 12px;
-        }
-
-        label { width: 140px; text-align: left; }
-
-        input[type="email"], input[type="password"] {
-            flex: 1;
-            padding: 10px;
-            border-radius: 8px;
-            border: 1px solid rgba(255,255,255,0.3);
-            outline: none;
-        }
-
-        .sub {
-            font-size: 18px;
-            padding: 10px 18px;
-            align-items: center;
-            color: black;
-            background-color: white;
-            border: none;
-            border-radius: 10px;
-            cursor: pointer;
-        }
-
-        .sub:hover { background: black; color: white; }
-
-        a {
-            display: inline-block;
-            margin: 2px;
-            color: black;
-            text-decoration: none;
-            background-color: #f1cc75;
-            padding: 10px 14px;
-            border-radius: 60px;
-        }
-
-        a:hover { transform: scale(1.05); }
-
-        .msg-error {
-            background: rgba(220, 53, 69, 0.95);
-            padding: 10px;
-            border-radius: 10px;
-            margin-bottom: 12px;
-            font-size: 16px;
-        }
-
-        .msg-success {
-            background: rgba(40, 167, 69, 0.95);
-            padding: 10px;
-            border-radius: 10px;
-            margin-bottom: 12px;
-            font-size: 16px;
-        }
-
-        .actions {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-top: 10px;
-            gap: 12px;
-        }
-    </style>
-</head>
-
-<body>
-    <nav class="navbar">
-        <img class="img1" src=".//images/logo.png" height="80px" width="80px">
-        <h1 class="nav1">SECURITY PROVIDER</h1>
-        <a href=".//index.php">Back</a>
-    </nav>
-
-    <section class="form1">
-        <div class="card">
-            <h2 style="margin-top:0;">Admin Registration</h2>
+<?php auth_start($isAdmin ? 'Add an Admin' : 'Create the First Admin', $isAdmin ? 'Give another person admin access.' : 'This page closes once the first admin exists.', '../', 'shield'); ?>
 
             <?php if ($error): ?>
-                <div class="msg-error"><?php echo e($error); ?></div>
+                <div class="alert alert-error"><?php echo e($error); ?></div>
             <?php endif; ?>
 
             <?php if ($success): ?>
-                <div class="msg-success"><?php echo e($success); ?></div>
+                <div class="alert alert-ok"><?php echo e($success); ?></div>
+                <?php if ($recoveryKey): ?>
+                    <div class="alert alert-gold">
+                        <strong>Save this recovery key now.</strong> It is the only way to reset this admin's password
+                        on the "Forgot password" page, and it will not be shown again.
+                        <div class="key-box"><?php echo e($recoveryKey); ?></div>
+                    </div>
+                <?php endif; ?>
+                <a class="btn-gold" href="<?php echo $isAdmin ? 'admin_dashboard.php' : 'admin_login.php'; ?>">
+                    <?php echo $isAdmin ? 'Back to dashboard' : 'Go to admin login'; ?>
+                </a>
+            <?php else: ?>
+                <form method="POST" action="admin_registration.php">
+                    <?php echo csrf_field(); ?>
+                    <div class="field">
+                        <label for="email">Email</label>
+                        <input type="email" id="email" name="email" placeholder="admin@example.com" required>
+                    </div>
+                    <div class="field">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" name="password" required>
+                        <span class="hint">8+ characters, letters and numbers.</span>
+                    </div>
+                    <div class="field">
+                        <label for="confirm_password">Confirm password</label>
+                        <input type="password" id="confirm_password" name="confirm_password" required>
+                    </div>
+                    <button type="submit" class="btn-gold">Create admin</button>
+                </form>
+                <p class="auth-foot"><a href="<?php echo $isAdmin ? 'admin_dashboard.php' : 'admin_login.php'; ?>">&larr; Back</a></p>
             <?php endif; ?>
-
-            <form method="POST" action="admin_registration.php">
-<?php echo csrf_field(); ?>
-                <div class="row">
-                    <label for="email"><b>Email</b></label>
-                    <input type="email" id="email" name="email" required>
-                </div>
-
-                <div class="row">
-                    <label for="password"><b>Password</b></label>
-                    <input type="password" id="password" name="password" required>
-                </div>
-
-                <div class="row">
-                    <label for="confirm_password"><b>Confirm</b></label>
-                    <input type="password" id="confirm_password" name="confirm_password" required>
-                </div>
-
-                <div class="actions">
-                    <a href="admin_login.php">Back to Login</a>
-                    <input type="submit" value="Register" class="sub">
-                </div>
-            </form>
-        </div>
-    </section>
-</body>
-</html>
+<?php auth_end(); ?>

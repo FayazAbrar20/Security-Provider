@@ -107,6 +107,55 @@ function password_problem(string $password): string
     return '';
 }
 
+/* ---------- Account recovery ---------- */
+
+// A random key like "K7QM-2XRA-9DHT-WC4P" (no 0/O/1/I to avoid misreading).
+function new_recovery_key(): string
+{
+    $alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    $key = '';
+    for ($i = 0; $i < 16; $i++) {
+        $key .= $alphabet[random_int(0, strlen($alphabet) - 1)];
+        if ($i % 4 === 3 && $i < 15) {
+            $key .= '-';
+        }
+    }
+    return $key;
+}
+
+function normalize_recovery_key(string $key): string
+{
+    $clean = strtoupper(preg_replace('/[^A-Za-z0-9]/', '', $key));
+    return implode('-', str_split($clean, 4));
+}
+
+const RESET_WINDOW_MINUTES = 15;
+const RESET_MAX_PER_ACCOUNT = 5;
+const RESET_MAX_PER_IP = 20;
+
+// True when this email or this visitor has failed identity checks too often recently.
+function reset_blocked(mysqli $conn, string $email): bool
+{
+    $since = date('Y-m-d H:i:s', time() - RESET_WINDOW_MINUTES * 60);
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+    $row = db_one($conn,
+        "SELECT SUM(email = ?) AS by_email, SUM(ip = ?) AS by_ip
+         FROM password_reset_attempts WHERE attempted_at >= ?",
+        [strtolower($email), $ip, $since]);
+    return (int)($row['by_email'] ?? 0) >= RESET_MAX_PER_ACCOUNT || (int)($row['by_ip'] ?? 0) >= RESET_MAX_PER_IP;
+}
+
+function reset_record_failure(mysqli $conn, string $email): void
+{
+    db_query($conn, "INSERT INTO password_reset_attempts (email, ip, attempted_at) VALUES (?, ?, NOW())",
+        [strtolower($email), $_SERVER['REMOTE_ADDR'] ?? '']);
+}
+
+function reset_clear_failures(mysqli $conn, string $email): void
+{
+    db_query($conn, "DELETE FROM password_reset_attempts WHERE email = ?", [strtolower($email)]);
+}
+
 /* ---------- Login and "remember me" ---------- */
 
 function login_user(array $user): void

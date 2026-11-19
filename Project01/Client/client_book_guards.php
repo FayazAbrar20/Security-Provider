@@ -50,49 +50,18 @@
         $message = "Booking failed. Please try again.";
     }
 ?>
+<?php auth_start($success ? 'Booking Requested' : 'Could Not Book', $success ? 'The guard will confirm or decline your request.' : 'Nothing was booked.', '../', $success ? 'check' : 'calendar'); ?>
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Book Guard</title>
-<style>
-    body { 
-        font-family: Arial, sans-serif; 
-        background: #f5f5f5; 
-        padding: 50px; 
-        text-align: center; 
-    }
-    .container { 
-        background: white; 
-        padding: 30px; 
-        border-radius: 10px; 
-        display: inline-block; 
-    }
-    .btn { 
-        padding: 10px 20px; 
-        background: #3498db; 
-        color: white; 
-        text-decoration: none; 
-        border-radius: 5px; 
-        margin-top: 20px; 
-        display: inline-block; 
-    }
-    .btn:hover { background: #2980b9; }
-</style>
-</head>
-<body>
-    <div class="container">
-        <?php if ($success): ?>
-            <h2>Guard "<?php echo htmlspecialchars($guard['full_name']); ?>" booked successfully!</h2>
-            <p>Your booking status is <strong>Pending</strong>.</p>
-        <?php else: ?>
-            <h2>Could not book this guard.</h2>
-            <p><?php echo e($message); ?></p>
-        <?php endif; ?>
+            <?php if ($success): ?>
+                <div class="alert alert-ok">
+                    Guard "<?php echo e($guard['full_name']); ?>" booked successfully! Your booking status is <strong>Pending</strong>.
+                </div>
+            <?php else: ?>
+                <div class="alert alert-error"><?php echo e($message); ?></div>
+            <?php endif; ?>
 
-        <a href="client_dashboard.php" class="btn">Back to Dashboard</a>
-    </div>
-</body>
-</html>
+            <a href="client_dashboard.php<?php echo $success ? '#my-bookings-modal' : ''; ?>" class="btn-gold">
+                <?php echo $success ? 'See my bookings' : 'Back to dashboard'; ?>
+            </a>
+            <p class="auth-foot"><a href="client_dashboard.php">&larr; Back to dashboard</a></p>
+<?php auth_end(); ?>

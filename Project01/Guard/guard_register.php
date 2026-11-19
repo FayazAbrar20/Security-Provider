@@ -115,256 +115,70 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
     }
 }
 ?>
+<?php
+    $v = function ($key) { return e($_SERVER['REQUEST_METHOD'] === 'POST' ? ($_POST[$key] ?? '') : ''); };
+    auth_start('Apply as a Guard', 'Join our verified security team. An admin reviews every application.', '../', 'badge', true);
+?>
 
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Guard Registration</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body {
-            font-family: Arial, sans-serif;
-            background: linear-gradient(135deg, #f2f2f2 0%, #ffffff 100%);
-            padding: 40px 20px;
-            min-height: 100vh;
-        }
-        
-        .register-container {
-            max-width: 600px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 12px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-            overflow: hidden;
-        }
-        
-        .register-header {
-            background: linear-gradient(135deg, #fdfdfd 0%, #ffffff 100%);
-            color: black;
-            padding: 30px;
-            text-align: center;
-        }
-        
-        .register-header h2 {
-            font-size: 28px;
-            margin-bottom: 5px;
-        }
-        
-        .register-form {
-            padding: 40px;
-        }
-        
-        .form-group {
-            margin-bottom: 20px;
-        }
-        
-        .form-label {
-            display: block;
-            font-weight: 500;
-            color: #2c3e50;
-            margin-bottom: 8px;
-            font-size: 14px;
-        }
-        
-        .form-control {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #ecf0f1;
-            border-radius: 8px;
-            font-size: 14px;
-            transition: 0.3s;
-        }
-        
-        .form-control:focus {
-            outline: none;
-            border-color: #ffffff;
-            box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.25);
-        }
-        
-        .btn {
-            width: 100%;
-            padding: 14px;
-            background: linear-gradient(135deg, #4ebeee 0%, #3099c0 100%);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: 0.3s;
-        }
-        
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(40, 167, 69, 0.4);
-        }
-        
-        .error {
-            background: #f8d7da;
-            color: #dc3545;
-            padding: 12px;
-            border-radius: 6px;
-            border: 1px solid #f5c6cb;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-        
-        /* Success popup styles */
-        .popup-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(0,0,0,0.6);
-            display: none;
-            align-items: center;
-            justify-content: center;
-            z-index: 9999;
-        }
-        
-        .popup-overlay.show { display: flex; }
-        
-        .popup-box {
-            max-width: 420px;
-            background: #fff;
-            border-radius: 12px;
-            padding: 30px;
-            text-align: center;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
-        }
-        
-        .popup-box h4 {
-            color: #155724;
-            margin-bottom: 10px;
-        }
-        
-        .popup-buttons {
-            display: flex;
-            gap: 12px;
-            justify-content: center;
-            margin-top: 20px;
-        }
-        
-        .btn-success, .btn-secondary {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 6px;
-            color: white;
-            text-decoration: none;
-            font-weight: 500;
-            display: inline-block;
-            transition: 0.3s;
-        }
-        
-        .btn-success {
-            background: #28a745;
-        }
-        
-        .btn-success:hover {
-            background: #218838;
-            transform: translateY(-1px);
-        }
-        
-        .btn-secondary {
-            background: #6c757d;
-        }
-        
-        .btn-secondary:hover {
-            background: #545b62;
-            transform: translateY(-1px);
-        }
-        
-        @media (max-width: 768px) {
-            body { padding: 20px 10px; }
-            .register-form { padding: 20px; }
-            .popup-buttons { flex-direction: column; }
-        }
-    </style>
-</head>
+            <?php if ($showPopup): ?>
+                <div class="alert alert-ok">
+                    <strong>Application received.</strong> An admin will review it soon; you can log in to check your status.
+                    <a href="guard_login.php">Go to login &rarr;</a>
+                </div>
+            <?php endif; ?>
 
-<body>
+            <?php if ($error): ?>
+                <div class="alert alert-error"><?php echo e($error); ?></div>
+            <?php endif; ?>
 
-<!-- Success popup (CSS-only) -->
-<div class="popup-overlay <?php echo $showPopup ? 'show' : ''; ?>">
-    <div class="popup-box">
-        <h4>Registration successful</h4>
-        <p>Wait for admin approval.</p>
-        <div class="popup-buttons">
-            <a href="guard_login.php" class="btn-success">Login</a>
-            <a href="guard_register.php" class="btn-secondary">Close</a>
-        </div>
-    </div>
-</div>
+            <form method="post" enctype="multipart/form-data">
+                <?php echo csrf_field(); ?>
+                <div class="form-grid">
+                    <div class="field full">
+                        <label for="full_name">Full name <span class="req">*</span></label>
+                        <input type="text" id="full_name" name="full_name" value="<?php echo $v('full_name'); ?>" required>
+                    </div>
+                    <div class="field">
+                        <label for="email">Email <span class="req">*</span></label>
+                        <input type="email" id="email" name="email" value="<?php echo $v('email'); ?>" required>
+                    </div>
+                    <div class="field">
+                        <label for="phone">Phone <span class="req">*</span></label>
+                        <input type="tel" id="phone" name="phone" value="<?php echo $v('phone'); ?>" placeholder="01XXXXXXXXX" required>
+                    </div>
+                    <div class="field">
+                        <label for="password">Password <span class="req">*</span></label>
+                        <input type="password" id="password" name="password" required>
+                        <span class="hint">8+ characters, letters and numbers.</span>
+                    </div>
+                    <div class="field">
+                        <label for="location">Location <span class="req">*</span></label>
+                        <input type="text" id="location" name="location" value="<?php echo $v('location'); ?>" placeholder="e.g. Gulshan, Dhaka" required>
+                    </div>
+                    <div class="field">
+                        <label for="experience">Experience (years) <span class="req">*</span></label>
+                        <input type="number" id="experience" name="experience" value="<?php echo $v('experience'); ?>" min="0" max="60" required>
+                    </div>
+                    <div class="field">
+                        <label for="hourly_rate">Hourly rate ($) <span class="req">*</span></label>
+                        <input type="number" id="hourly_rate" name="hourly_rate" value="<?php echo $v('hourly_rate'); ?>" step="0.01" min="1" required>
+                    </div>
+                    <div class="field full">
+                        <label for="skills">Skills <span class="req">*</span></label>
+                        <textarea id="skills" name="skills" rows="2" placeholder="e.g. CCTV monitoring, first aid, crowd control" required><?php echo $v('skills'); ?></textarea>
+                    </div>
+                    <div class="field full">
+                        <label for="specialties">Specialties <span class="req">*</span></label>
+                        <input type="text" id="specialties" name="specialties" value="<?php echo $v('specialties'); ?>" placeholder="Comma separated, e.g. Night shift, Event security" required>
+                    </div>
+                    <div class="field full">
+                        <label for="profile_image">Profile photo <span class="req">*</span></label>
+                        <input type="file" id="profile_image" name="profile_image" accept="image/jpeg,image/png,image/gif" required>
+                        <span class="hint">JPG, PNG or GIF, up to 2 MB.</span>
+                    </div>
+                </div>
+                <button type="submit" class="btn-gold">Submit application</button>
+            </form>
 
-<div class="register-container">
-    <div class="register-header">
-        <h2>Guard Registration</h2>
-        <p>Join our security platform</p>
-    </div>
-    
-    <div class="register-form">
-        <?php if ($error): ?>
-            <div class="error"><?php echo e($error); ?></div>
-        <?php endif; ?>
-
-        <form method="post" enctype="multipart/form-data">
-<?php echo csrf_field(); ?>
-            <div class="form-group">
-                <label class="form-label">Full Name</label>
-                <input type="text" name="full_name" class="form-control" required>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Email</label>
-                <input type="email" name="email" class="form-control" required>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Password</label>
-                <input type="password" name="password" class="form-control" required>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Phone</label>
-                <input type="text" name="phone" class="form-control" required>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Location</label>
-                <input type="text" name="location" class="form-control" required>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Experience (years)</label>
-                <input type="number" name="experience" class="form-control" min="0" max="50" required>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Skills</label>
-                <textarea name="skills" class="form-control" rows="3" required></textarea>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Hourly Rate ($)</label>
-                <input type="number" step="0.01" name="hourly_rate" class="form-control" min="5" max="100" required>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Specialties</label>
-                <input type="text" name="specialties" class="form-control" placeholder="e.g., Night shift, Event security" required>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Profile Image</label>
-                <input type="file" name="profile_image" class="form-control" accept="image/*" required>
-            </div>
-            
-            <button type="submit" class="btn">Register</button>
-        </form>
-    </div>
-</div>
-
-</body>
-</html>
+            <p class="auth-foot">Already applied? <a href="guard_login.php">Log in</a></p>
+<?php auth_end(); ?>

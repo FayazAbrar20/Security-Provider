@@ -17,4 +17,16 @@ CREATE TABLE IF NOT EXISTS remember_tokens (
 -- make sure it allows 'cancelled' and 'rejected' (no effect if it is VARCHAR):
 -- ALTER TABLE bookings MODIFY status ENUM('pending','confirmed','rejected','cancelled') NOT NULL DEFAULT 'pending';
 
+-- Forgot password: admin recovery keys (hashed) and a log of failed identity checks.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS recovery_hash VARCHAR(255) NULL AFTER role;
+
+CREATE TABLE IF NOT EXISTS password_reset_attempts (
+    id           INT AUTO_INCREMENT PRIMARY KEY,
+    email        VARCHAR(255) NOT NULL,
+    ip           VARCHAR(45)  NOT NULL,
+    attempted_at DATETIME NOT NULL,
+    INDEX (email),
+    INDEX (ip, attempted_at)
+) ENGINE=InnoDB;
+
 -- Old remember-me cookies (raw user ids) stop working automatically: users simply log in again.

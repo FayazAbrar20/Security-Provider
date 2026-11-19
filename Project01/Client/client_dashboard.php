@@ -141,694 +141,267 @@
          ORDER BY b.created_at DESC",
         [$client['id']]);
 ?>
-
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Client Dashboard</title>
-
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        body {
-            font-family: Arial, sans-serif;
-            background: #f5f5f5;
+<?php
+    $hour = (int)date('G');
+    $greeting = $hour < 12 ? 'Good morning' : ($hour < 17 ? 'Good afternoon' : 'Good evening');
+    $initial = strtoupper(mb_substr(trim($client['full_name']), 0, 1));
+    $bookingRows = [];
+    if ($bookings_result && $bookings_result !== true) {
+        while ($row = mysqli_fetch_assoc($bookings_result)) {
+            $bookingRows[] = $row;
         }
-
-        .sidebar {
-            position: fixed;
-            left: 0;
-            top: 0;
-            width: 250px;
-            height: 100vh;
-            background: #3498db;
-            color: white;
-            padding: 20px 0;
-            z-index: 1000;
-        }
-
-        .sidebar h3 {
-            text-align: center;
-            padding: 20px;
-            border-bottom: 1px solid #e1e9f1;
-            margin-bottom: 20px;
-        }
-
-        .sidebar a {
-            display: block;
-            color: white;
-            text-decoration: none;
-            padding: 15px 25px;
-            border-bottom: 1px solid #e3e9ef;
-        }
-
-        .sidebar a:hover {
-            background: #66b0e0;
-        }
-
-        .sidebar-link {
-            display: flex !important;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .sidebar-link img {
-            width: 20px;
-            height: 20px;
-            flex-shrink: 0;
-            vertical-align: middle;
-        }
-
-        .sidebar .logout-btn {
-            position: absolute;
-            bottom: 20px;
-            width: 100%;
-            padding: 0 25px;
-        }
-
-        .sidebar .logout-btn a {
-            background: #e74c3c;
-            text-align: center;
-            border-radius: 5px;
-        }
-
-        .sidebar .logout-btn a:hover {
-            background: #c0392b;
-        }
-
-        /* Main Content */
-        .main-content {
-            margin-left: 250px;
-            padding: 30px;
-        }
-
-        .header {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 30px;
-            border: 1px solid #ddd;
-        }
-
-        .stats-container {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
-            margin-bottom: 40px;
-        }
-
-        .stat-card {
-            background: white;
-            padding: 25px;
-            border-radius: 8px;
-            text-align: center;
-            border: 1px solid #ddd;
-        }
-
-        .stat-card h3 {
-            font-size: 36px;
-            color: #3498db;
-            margin-bottom: 10px;
-        }
-
-        /* Guards Section */
-        .guards-section { margin-top: 10px; }
-
-        .section-header h3 {
-            color: #2c3e50;
-            font-size: 22px;
-            margin-bottom: 15px;
-        }
-
-        .guards-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-            gap: 25px;
-            margin-bottom: 30px;
-        }
-
-        .guard-card {
-            background: white;
-            border-radius: 12px;
-            overflow: hidden;
-            border: 1px solid #ddd;
-            position: relative;
-            width: 320px;
-            height: 420px;
-    
-        }
-
-        .guard-image-container {
-            width: 100%;
-            height: 200px;
-            overflow: hidden;
-            background: #999;
-            position: relative;
-        }
-
-        .guard-image {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
-
-        .availability-badge {
-            position: absolute;
-            top: 15px;
-            right: 15px;
-            background: #27ae60;
-            color: white;
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-        }
-
-        .guard-info { padding: 15px; }
-
-        .guard-name {
-            font-size: 18px;
-            font-weight: bold;
-            color: #2c3e50;
-            margin-bottom: 6px;
-        }
-
-        .guard-location {
-            color: #7f8c8d;
-            font-size: 14px;
-            margin-bottom: 10px;
-        }
-
-        .guard-rating {
-            font-size: 14px;
-            margin-bottom: 10px;
-        }
-
-        .guard-specialties { margin-bottom: 12px; }
-
-        .specialty-tag {
-            display: inline-block;
-            background: #ecf0f1;
-            color: #34495e;
-            padding: 5px 10px;
-            border-radius: 15px;
-            font-size: 12px;
-            margin: 0 6px 6px 0;
-        }
-
-        .guard-footer {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding-top: 10px;
-            border-top: 1px solid #eee;
-        }
-
-        .guard-price {
-            font-size: 20px;
-            font-weight: bold;
-            color: #2c3e50;
-        }
-
-        .price-unit {
-            font-size: 12px;
-            color: #7f8c8d;
-            font-weight: normal;
-        }
-
-        .view-profile-btn {
-            display: inline-block;
-            text-decoration: none;
-            border: 1px solid #3498db;
-            color: #3498db;
-            padding: 6px 12px;
-            border-radius: 5px;
-            font-size: 14px;
-        }
-
-        .view-profile-btn:hover {
-            background: #3498db;
-            color: white;
-        }
-
-        .guard-profile-card {
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        .guard-profile-card:target {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        .guard-profile-card:target ~ .modal-overlay {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        .modal-card {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            width: 90%;
-            max-width: 600px;
-            max-height: 80vh;
-            overflow-y: auto;
-            z-index: 3000;
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.6);
-            z-index: 2000;
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        #profile-view:target ~ .modal-overlay,
-        #profile-edit:target ~ .modal-overlay,
-        #password-change:target ~ .modal-overlay {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        #profile-view:target ~ .profile-card,
-        #profile-edit:target ~ .edit-card,
-        #password-change:target ~ .password-card {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        #my-bookings-modal:target ~ .modal-overlay,
-        #my-bookings-modal:target ~ .bookings-card {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        .bookings-card {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            width: 90%;
-            max-width: 700px;
-            max-height: 80vh;
-            overflow-y: auto;
-            z-index: 3000;
-            opacity: 0;
-            pointer-events: none;
-        }
-
-
-
-        .close-btn {
-            position: absolute;
-            top: 10px;
-            right: 12px;
-            width: 30px;
-            height: 30px;
-            background: #e74c3c;
-            color: white;
-            text-decoration: none;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-        }
-
-        .error { 
-            color: #b30000;
-            font-size: 13px; 
-        }
-        .success { 
-            background: #d4edda; 
-            color: #155724; 
-            padding: 10px; 
-            margin-bottom: 10px; 
-            border: 1px solid #9fd3a9; 
-        }
-
-        .info-table { 
-            width: 100%; 
-            margin-top: 15px; 
-            border-collapse: collapse; 
-        }
-        .info-table th, .info-table td { 
-            padding: 10px; 
-            border-bottom: 1px solid #eee; 
-            text-align: left;
-        }
-
-        .field { margin-bottom: 12px; }
-        .field label { 
-            display: block; 
-            margin-bottom: 6px; 
-            font-size: 14px; 
-        }
-
-        .field input[type="text"],
-        .field input[type="password"],
-        .field textarea,
-        .field select {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #aaa;
-            font-size: 14px;
-        }
-
-        .btn {
-            padding: 10px 15px;
-            border: none;
-            background: #333;
-            color: white;
-            cursor: pointer;
-        }
-        .btn:hover { background: #111; }
-    </style>
-</head>
+    }
+    page_head('Client Dashboard', '../');
+?>
 <body>
-
     <div id="profile-view"></div>
     <div id="profile-edit"></div>
     <div id="password-change"></div>
     <div id="my-bookings-modal"></div>
 
-    <div class="sidebar">
-        <h3>Client Portal</h3>
-        <a href="#profile-view" class="sidebar-link"><img src="../uploads/clients/circle-user_9821720.png"> My Profile</a>
-        <a href="#profile-edit" class="sidebar-link"><img src="../uploads/clients/pen-circle_18844818.png"> Edit Profile</a>
-        <a href="#password-change" class="sidebar-link"><img src="../uploads/clients/password-lock_17525250.png"> Change Password</a>
-        <!--<a href="#browse-guards" class="sidebar-link"><img src="../uploads/clients/safe-browsing_19029169.png"> Browse Guards</a> -->
-        <a href="#my-bookings-modal" class="sidebar-link"><img src="../uploads/clients/booking_14703155.png"> My Bookings</a>
+    <aside class="sidebar">
+        <a class="side-brand" href="../index.php">
+            <img src="../uploads/index/Image (12).jpg" alt="">
+            <span><strong>SECURITY PROVIDER</strong><small>Client</small></span>
+        </a>
+        <a href="#profile-view" class="sidebar-link"><img src="../uploads/clients/circle-user_9821720.png" alt=""> My Profile</a>
+        <a href="#profile-edit" class="sidebar-link"><img src="../uploads/clients/pen-circle_18844818.png" alt=""> Edit Profile</a>
+        <a href="#password-change" class="sidebar-link"><img src="../uploads/clients/password-lock_17525250.png" alt=""> Change Password</a>
+        <a href="#my-bookings-modal" class="sidebar-link"><img src="../uploads/clients/booking_14703155.png" alt=""> My Bookings</a>
+        <div class="logout-btn"><a href="client_logout.php">Log out</a></div>
+    </aside>
 
-        <div class="logout-btn">
-            <a href="client_logout.php">Logout</a>
-        </div>
-    </div>
-
-
-    <form method="get" style="margin-bottom:20px; display:flex; justify-content:flex-end;">
-    <div style="display:flex; gap:10px; max-width:500px;">
-        <input
-            type="text"
-            name="search"
-            placeholder="Search guards by name, location or skill..."
-            value="<?php echo htmlspecialchars($search); ?>"
-            style="flex:1; padding:10px; border:1px solid #ccc; border-radius:6px;"
-        >
-        <button
-            type="submit"
-            style="padding:10px 20px; background:#3498db; color:white; border:none; border-radius:6px; cursor:pointer;">
-            Search
-        </button>
-
-        <?php if ($search): ?>
-            <a href="client_dashboard.php"
-            style="padding:10px 15px; background:#e74c3c; color:white; border-radius:6px; text-decoration:none;">
-            Clear
-            </a>
-        <?php endif; ?>
-    </div>
-</form>
-
-
-
-    <!-- Main Content -->
-    <div class="main-content">
-        <div class="header">
-            <h2>Welcome, <?php echo e($client['full_name']); ?>!</h2>
-            <p style="color:#666;">Email: <?php echo e($client['email']); ?></p>
+    <main class="main-content">
+        <div class="topline">
+            <form method="get" class="search-form">
+                <input type="text" name="search" placeholder="Search guards by name, location or specialty..." value="<?php echo e($search); ?>">
+                <button type="submit" class="btn">Search</button>
+                <?php if ($search !== ''): ?>
+                    <a href="client_dashboard.php" class="btn-ghost btn-sm">Clear</a>
+                <?php endif; ?>
+            </form>
         </div>
 
-        <!-- Statistics -->
-        <div class="stats-container">
-            <div class="stat-card">
+        <section class="header">
+            <div class="avatar"><?php echo e($initial); ?></div>
+            <div>
+                <div class="greet"><?php echo e($greeting); ?></div>
+                <h2>Welcome, <?php echo e($client['full_name']); ?>!</h2>
+                <p><?php echo e($client['email']); ?> &middot; <?php echo e(ucfirst($client['organization_type'])); ?> client</p>
+            </div>
+        </section>
+
+        <section class="stats-container">
+            <div class="stat-card accent-gold">
+                <div class="stat-icon"><?php echo icon('calendar'); ?></div>
                 <h3><?php echo e($total_bookings); ?></h3>
-                <p>Total Bookings</p>
+                <p>Total bookings</p>
             </div>
-            <div class="stat-card">
+            <div class="stat-card accent-amber">
+                <div class="stat-icon"><?php echo icon('clock'); ?></div>
                 <h3><?php echo e($pending_bookings); ?></h3>
-                <p>Pending Bookings</p>
+                <p>Waiting for the guard</p>
             </div>
-            <div class="stat-card">
+            <div class="stat-card accent-green">
+                <div class="stat-icon"><?php echo icon('check'); ?></div>
                 <h3><?php echo e($confirmed_bookings); ?></h3>
-                <p>Confirmed Bookings</p>
+                <p>Confirmed</p>
             </div>
-        </div>
+        </section>
 
-        <!-- Guards -->
-        <div class="guards-section">
+        <section class="guards-section">
             <div class="section-header">
-                <h3>Available Security Guards</h3>
+                <h3><?php echo $search !== '' ? 'Search results' : 'Available security guards'; ?></h3>
+                <span class="count"><?php echo count($guards); ?> verified guard<?php echo count($guards) === 1 ? '' : 's'; ?></span>
             </div>
 
-            <div class="guards-grid">
-                <?php foreach ($guards as $guard): ?>
-                    <?php
-                        $specialties = explode(',', $guard['specialties'] ?? '');
-                        $img_src = "../" . $guard['profile_image'];
-
-                        if (!empty($guard['profile_image'])) {
-
-                            $project_root = realpath(__DIR__ . "/..");
-
-                            $fs_path = $project_root . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $guard['profile_image']);
-
-                            $parts = explode('/', $guard['profile_image']);
-                            $web_path = "../" . implode('/', array_map('rawurlencode', $parts));
-
-                            if (file_exists($fs_path)) {
-                                $img_src = $web_path;
+            <?php if (!$guards): ?>
+                <div class="empty">
+                    <?php echo icon('search'); ?>
+                    <p><?php echo $search !== '' ? 'No guards match "' . e($search) . '". Try another name, area or skill.' : 'No verified guards yet. Check back soon.'; ?></p>
+                </div>
+            <?php else: ?>
+                <div class="guards-grid">
+                    <?php foreach ($guards as $i => $guard): ?>
+                        <?php
+                            $specialties = array_filter(array_map('trim', explode(',', $guard['specialties'] ?? '')));
+                            $img_src = "";
+                            if (!empty($guard['profile_image']) && file_exists(dirname(__DIR__) . '/' . $guard['profile_image'])) {
+                                $img_src = "../" . implode('/', array_map('rawurlencode', explode('/', $guard['profile_image'])));
                             }
-                        }
-
-                        $availability = $guard['availability_status'] ?? 'available';
-                        $rating = isset($guard['rating']) ? number_format((float)$guard['rating'], 1) : '0.0';
-                        $reviews = isset($guard['reviews_count']) ? (int)$guard['reviews_count'] : 0;
-                    ?>
-
-                    <div class="guard-card">
-                        <div class="guard-image-container">
-                            <?php if ($img_src): ?>
-                                <img src="<?php echo e($img_src); ?>" alt="<?php echo e($guard['full_name']); ?>" class="guard-image">
-                            <?php endif; ?>
-                        </div>
-
-                        <span class="availability-badge"><?php echo e($availability); ?></span>
-
-                        <div class="guard-info">
-                            <div class="guard-name"><?php echo e($guard['full_name']); ?></div>
-                            <div class="guard-location"><?php echo e($guard['location']); ?></div>
-
-                            <div class="guard-rating">
-                                Rating <?php echo e($rating); ?> (<?php echo e($reviews); ?>)
+                            $availability = $guard['availability_status'] ?? 'available';
+                            $rating = isset($guard['rating']) ? (float)$guard['rating'] : 0.0;
+                            $reviews = isset($guard['reviews_count']) ? (int)$guard['reviews_count'] : 0;
+                            $stars = str_repeat('★', (int)round($rating)) . str_repeat('☆', 5 - (int)round($rating));
+                        ?>
+                        <article class="guard-card" style="animation-delay: <?php echo min($i, 8) * 0.05; ?>s">
+                            <div class="guard-image-container">
+                                <?php if ($img_src): ?>
+                                    <img src="<?php echo e($img_src); ?>" alt="<?php echo e($guard['full_name']); ?>" class="guard-image">
+                                <?php endif; ?>
                             </div>
-
-                            <div class="guard-specialties">
-                                <?php foreach ($specialties as $specialty): ?>
-                                    <?php if (trim($specialty) !== ""): ?>
-                                        <span class="specialty-tag"><?php echo e(trim($specialty)); ?></span>
-                                    <?php endif; ?>
-                                <?php endforeach; ?>
-                            </div>
-
-                            <div class="guard-footer">
-                                <div class="guard-price">
-                                    $<?php echo number_format((float)$guard['hourly_rate'], 0); ?>
-                                    <span class="price-unit">/hr</span>
+                            <span class="availability-badge"><?php echo e($availability); ?></span>
+                            <div class="guard-info">
+                                <div class="guard-name"><?php echo e($guard['full_name']); ?></div>
+                                <div class="guard-location"><?php echo e($guard['location']); ?> &middot; <?php echo (int)$guard['experience']; ?> yrs experience</div>
+                                <div class="guard-rating">
+                                    <span class="stars"><?php echo $stars; ?></span>
+                                    <?php echo $reviews ? e(number_format($rating, 1)) . ' (' . $reviews . ')' : 'New guard'; ?>
                                 </div>
-                                <a href="#guard-modal-<?php echo e($guard['id']); ?>" class="view-profile-btn">
-                                    View Profile
-                                </a>
+                                <div class="guard-specialties">
+                                    <?php foreach (array_slice($specialties, 0, 4) as $specialty): ?>
+                                        <span class="specialty-tag"><?php echo e($specialty); ?></span>
+                                    <?php endforeach; ?>
+                                </div>
+                                <div class="guard-footer">
+                                    <div class="guard-price">$<?php echo number_format((float)$guard['hourly_rate'], 0); ?><span class="price-unit"> /hr</span></div>
+                                    <a href="#guard-modal-<?php echo (int)$guard['id']; ?>" class="view-profile-btn">View profile</a>
+                                </div>
                             </div>
-                        </div>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-
-        </div>
-    </div>
-
-    <!-- Blur Overlay -->
-    <div class="modal-overlay"></div>
+                        </article>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+        </section>
+    </main>
 
     <!-- My Profile -->
     <div class="modal-card profile-card">
-        <a href="#" class="close-btn">&times;</a>
+        <a href="#" class="close-btn" aria-label="Close">&times;</a>
         <h3>My Profile</h3>
-
         <table class="info-table">
-            <tr><th>Full Name:</th><td><?php echo e($client['full_name']); ?></td></tr>
-            <tr><th>Email:</th><td><?php echo e($client['email']); ?></td></tr>
-            <tr><th>Phone:</th><td><?php echo e($client['phone']); ?></td></tr>
-            <tr><th>Address:</th><td><?php echo e($client['address'] ?: 'Not provided'); ?></td></tr>
-            <tr><th>Organization Type:</th><td><?php echo e(ucfirst($client['organization_type'])); ?></td></tr>
-            <tr><th>Member Since:</th><td><?php echo e(date('F d, Y', strtotime($client['created_at']))); ?></td></tr>
+            <tr><th>Full name</th><td><?php echo e($client['full_name']); ?></td></tr>
+            <tr><th>Email</th><td><?php echo e($client['email']); ?></td></tr>
+            <tr><th>Phone</th><td><?php echo e($client['phone']); ?></td></tr>
+            <tr><th>Address</th><td><?php echo e($client['address'] ?: 'Not provided'); ?></td></tr>
+            <tr><th>Organization type</th><td><?php echo e(ucfirst($client['organization_type'])); ?></td></tr>
+            <tr><th>Member since</th><td><?php echo e(date('F d, Y', strtotime($client['created_at']))); ?></td></tr>
         </table>
     </div>
 
     <!-- Edit Profile -->
     <div class="modal-card edit-card">
-        <a href="#" class="close-btn">&times;</a>
+        <a href="#" class="close-btn" aria-label="Close">&times;</a>
         <h3>Edit Profile</h3>
-
         <?php if ($success): ?>
             <div class="success"><?php echo e($success); ?></div>
         <?php endif; ?>
-
         <form method="post" action="#profile-edit">
-<?php echo csrf_field(); ?>
+            <?php echo csrf_field(); ?>
             <div class="field">
-                <label>Full Name:</label>
-                <input type="text" name="name" value="<?php echo e($client['full_name']); ?>">
+                <label for="ep-name">Full name</label>
+                <input type="text" id="ep-name" name="name" value="<?php echo e($client['full_name']); ?>">
                 <span class="error"><?php echo e($nameErr); ?></span>
             </div>
-
             <div class="field">
-                <label>Phone:</label>
-                <input type="text" name="phone" value="<?php echo e($client['phone']); ?>">
+                <label for="ep-phone">Phone</label>
+                <input type="text" id="ep-phone" name="phone" value="<?php echo e($client['phone']); ?>">
                 <span class="error"><?php echo e($phoneErr); ?></span>
             </div>
-
             <div class="field">
-                <label>Address:</label>
-                <textarea name="address" rows="3"><?php echo e($client['address']); ?></textarea>
+                <label for="ep-address">Address</label>
+                <textarea id="ep-address" name="address" rows="2"><?php echo e($client['address']); ?></textarea>
             </div>
-
             <div class="field">
-                <label>Organization Type:</label>
-                <select name="org_type">
-                    <option value="home" <?php if($client['organization_type']=='home') echo 'selected'; ?>>Home</option>
-                    <option value="industry" <?php if($client['organization_type']=='industry') echo 'selected'; ?>>Industry</option>
-                    <option value="individual" <?php if($client['organization_type']=='individual') echo 'selected'; ?>>Individual</option>
+                <label for="ep-org">Organization type</label>
+                <select id="ep-org" name="org_type">
+                    <?php foreach (['individual' => 'Individual', 'home' => 'Home', 'industry' => 'Industry'] as $value => $label): ?>
+                        <option value="<?php echo $value; ?>" <?php if ($client['organization_type'] === $value) echo 'selected'; ?>><?php echo $label; ?></option>
+                    <?php endforeach; ?>
                 </select>
             </div>
-
-            <button type="submit" name="update_profile" class="btn">Update Profile</button>
+            <button type="submit" name="update_profile" class="btn-gold">Save changes</button>
         </form>
     </div>
 
     <!-- Change Password -->
     <div class="modal-card password-card">
-        <a href="#" class="close-btn">&times;</a>
+        <a href="#" class="close-btn" aria-label="Close">&times;</a>
         <h3>Change Password</h3>
-
         <?php if ($passwordSuccess): ?>
             <div class="success"><?php echo e($passwordSuccess); ?></div>
         <?php endif; ?>
-
         <form method="post" action="#password-change">
-<?php echo csrf_field(); ?>
+            <?php echo csrf_field(); ?>
             <div class="field">
-                <label>Current Password:</label>
-                <input type="password" name="current_password">
+                <label for="cp-current">Current password</label>
+                <input type="password" id="cp-current" name="current_password">
                 <span class="error"><?php echo e($currentErr); ?></span>
             </div>
-
             <div class="field">
-                <label>New Password:</label>
-                <input type="password" name="new_password">
+                <label for="cp-new">New password</label>
+                <input type="password" id="cp-new" name="new_password">
                 <span class="error"><?php echo e($newErr); ?></span>
+                <span class="hint">8+ characters, letters and numbers.</span>
             </div>
-
             <div class="field">
-                <label>Confirm New Password:</label>
-                <input type="password" name="confirm_password">
+                <label for="cp-confirm">Confirm new password</label>
+                <input type="password" id="cp-confirm" name="confirm_password">
                 <span class="error"><?php echo e($confirmErr); ?></span>
             </div>
-
-            <button type="submit" name="change_password" class="btn">Change Password</button>
+            <button type="submit" name="change_password" class="btn-gold">Update password</button>
         </form>
     </div>
 
-
-    <!-- My Bookings Modal -->
-    <div class="modal-card bookings-card">
-        <a href="#" class="close-btn">&times;</a>
+    <!-- My Bookings -->
+    <div class="bookings-card">
+        <a href="#" class="close-btn" aria-label="Close">&times;</a>
         <h3>My Bookings</h3>
-
-        <?php if ($bookings_result && $bookings_result !== true && mysqli_num_rows($bookings_result) > 0): ?>
-            <table class="info-table">
-                <tr>
-                    <th>Guard</th>
-                    <th>Location</th>
-                    <th>Hourly Rate</th>
-                    <th>Status</th>
-                    <th>Booked On</th>
-                    <th></th>
-                </tr>
-                <?php while ($booking = mysqli_fetch_assoc($bookings_result)): ?>
-                <tr>
-                    <td><?php echo e($booking['guard_name']); ?></td>
-                    <td><?php echo e($booking['location']); ?></td>
-                    <td>$<?php echo number_format((float)$booking['hourly_rate'], 2); ?>/hr</td>
-                    <td><?php echo e(ucfirst($booking['status'])); ?></td>
-                    <td><?php echo e(date('F d, Y H:i', strtotime($booking['created_at']))); ?></td>
-                    <td>
-                        <?php if ($booking['status'] === 'pending'): ?>
-                            <form method="post" onsubmit="return confirm('Cancel this booking?');">
-                                <?php echo csrf_field(); ?>
-                                <input type="hidden" name="booking_id" value="<?php echo (int)$booking['id']; ?>">
-                                <button type="submit" name="cancel_booking" class="btn">Cancel</button>
-                            </form>
-                        <?php endif; ?>
-                    </td>
-                </tr>
-                <?php endwhile; ?>
+        <?php if ($bookingRows): ?>
+            <table class="data-table">
+                <thead>
+                    <tr><th>Guard</th><th>Location</th><th>Rate</th><th>Status</th><th>Booked on</th><th></th></tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($bookingRows as $booking): ?>
+                        <tr>
+                            <td><strong><?php echo e($booking['guard_name']); ?></strong></td>
+                            <td class="muted"><?php echo e($booking['location']); ?></td>
+                            <td>$<?php echo number_format((float)$booking['hourly_rate'], 2); ?>/hr</td>
+                            <td><span class="chip chip-<?php echo e($booking['status']); ?>"><?php echo e($booking['status']); ?></span></td>
+                            <td class="muted"><?php echo e(date('M d, Y H:i', strtotime($booking['created_at']))); ?></td>
+                            <td>
+                                <?php if ($booking['status'] === 'pending'): ?>
+                                    <form method="post" class="inline-form" onsubmit="return confirm('Cancel this booking?');">
+                                        <?php echo csrf_field(); ?>
+                                        <input type="hidden" name="booking_id" value="<?php echo (int)$booking['id']; ?>">
+                                        <button type="submit" name="cancel_booking" class="btn-danger btn-sm">Cancel</button>
+                                    </form>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
             </table>
         <?php else: ?>
-            <p>You have no bookings yet.</p>
+            <div class="empty"><?php echo icon('calendar'); ?><p>No bookings yet. Pick a guard and book in one click.</p></div>
         <?php endif; ?>
     </div>
 
-    <!-- Guard Profile Modals -->
+    <!-- Guard profiles -->
     <?php foreach ($guards as $guard): ?>
-        
-
-        <!-- Guard Modal -->
-        <div id="guard-modal-<?php echo e($guard['id']); ?>" class="modal-card guard-profile-card">
-            <a href="#" class="close-btn">&times;</a>
-
+        <div id="guard-modal-<?php echo (int)$guard['id']; ?>" class="modal-card guard-profile-card">
+            <a href="#" class="close-btn" aria-label="Close">&times;</a>
             <h3><?php echo e($guard['full_name']); ?></h3>
-
-            
-        <?php if (!empty($guard['profile_image'])): ?>
-            <img src="../<?php echo htmlspecialchars($guard['profile_image']); ?>"
-                    style="width:100%;border-radius:8px;margin-bottom:10px;">
-        <?php endif; ?>
-
+            <?php if (!empty($guard['profile_image']) && file_exists(dirname(__DIR__) . '/' . $guard['profile_image'])): ?>
+                <img class="profile-photo" src="../<?php echo e($guard['profile_image']); ?>" alt="">
+            <?php endif; ?>
             <table class="info-table">
-                <tr><th>Location:</th><td><?php echo e($guard['location']); ?></td></tr>
-                <tr><th>Phone:</th><td><?php echo e($guard['phone']); ?></td></tr>
-                <tr><th>Experience:</th><td><?php echo e($guard['experience']); ?> years</td></tr>
-                <tr><th>Hourly Rate:</th><td>$<?php echo number_format($guard['hourly_rate'], 2); ?>/hr</td></tr>
-                <tr><th>Skills:</th><td><?php echo nl2br(e($guard['skills'])); ?></td></tr>
-                <tr><th>Specialties:</th><td><?php echo e($guard['specialties']); ?></td></tr>
+                <tr><th>Location</th><td><?php echo e($guard['location']); ?></td></tr>
+                <tr><th>Phone</th><td><?php echo e($guard['phone']); ?></td></tr>
+                <tr><th>Experience</th><td><?php echo (int)$guard['experience']; ?> years</td></tr>
+                <tr><th>Hourly rate</th><td>$<?php echo number_format((float)$guard['hourly_rate'], 2); ?>/hr</td></tr>
+                <tr><th>Skills</th><td><?php echo nl2br(e($guard['skills'])); ?></td></tr>
+                <tr><th>Specialties</th><td><?php echo e($guard['specialties']); ?></td></tr>
             </table>
-
-            <!-- Book This Guard Button (POST + CSRF token, so a link cannot book on someone's behalf) -->
-            <form method="post" action="client_book_guards.php" style="margin-top:15px;">
+            <form method="post" action="client_book_guards.php" style="margin-top:18px;">
                 <?php echo csrf_field(); ?>
                 <input type="hidden" name="guard_id" value="<?php echo (int)$guard['id']; ?>">
-                <button type="submit" class="btn">Book This Guard</button>
+                <button type="submit" class="btn-gold">Book this guard</button>
             </form>
         </div>
     <?php endforeach; ?>
 
+    <a href="#" class="modal-overlay" aria-label="Close"></a>
 </body>
 </html>

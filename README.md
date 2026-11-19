@@ -12,10 +12,14 @@ A web platform where clients book verified security guards for homes, businesses
 | Role | Can do |
 |---|---|
 | **Client** | Register and log in; search approved guards by name, location or specialty; view guard profiles; book a guard; see booking status (pending, confirmed, rejected, cancelled); cancel a pending booking; edit profile; change password |
-| **Guard** | Apply with profile details and a photo; log in; see bookings; confirm or reject pending bookings |
-| **Admin** | Review pending guard applications and approve or reject them |
+| **Guard** | Apply with profile details and a photo; log in; see bookings; confirm or reject pending bookings; change password |
+| **Admin** | See platform stats; review pending guard applications and approve or reject them; add admins; create a recovery key |
 
 Guards are only visible to clients after an admin approves them.
+
+**Forgot password** on every login page: clients and guards confirm their email, phone number and full name; admins confirm their email and a one-time recovery key (shown at signup or created from the dashboard). After 5 failed attempts for an email in 15 minutes, resets are blocked, and failures never reveal which emails exist. Note: phone and name are not secret, so a production version should email a one-time reset link instead.
+
+**Design:** one shared dark theme (`assets/theme.css`) matching the landing page: frosted-glass cards, gold accents, animated stat cards and pop-ups without JavaScript.
 
 ## Security
 

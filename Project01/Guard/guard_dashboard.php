@@ -24,8 +24,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['confirm_booking']) |
         "UPDATE bookings SET status = ? WHERE id = ? AND guard_id = ? AND status = 'pending'",
         [$new_status, (int)($_POST['booking_id'] ?? 0), $guard['id']]);
 
-    header("Location: guard_dashboard.php#my-bookings");
+    header("Location: guard_dashboard.php#bookings");
     exit();
+}
+
+// Change password (same rules as clients).
+$currentErr = $newErr = $confirmErr = "";
+$passwordSuccess = "";
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['change_password'])) {
+    $current = $_POST['current_password'] ?? '';
+    $new = $_POST['new_password'] ?? '';
+    $confirm = $_POST['confirm_password'] ?? '';
+    $user = db_one($conn, "SELECT password FROM users WHERE user_id = ?", [$user_id]);
+
+    if (!$user || !password_verify($current, $user['password'])) {
+        $currentErr = "Current password is incorrect";
+    } elseif (($problem = password_problem($new)) !== '') {
+        $newErr = $problem;
+    } elseif ($new !== $confirm) {
+        $confirmErr = "Passwords do not match";
+    } elseif (db_query($conn, "UPDATE users SET password = ? WHERE user_id = ?", [password_hash($new, PASSWORD_DEFAULT), $user_id])) {
+        db_query($conn, "DELETE FROM remember_tokens WHERE user_id = ?", [$user_id]);
+        $passwordSuccess = "Password changed successfully!";
+    }
 }
 
 // Booking statistics
@@ -48,425 +69,169 @@ $bookings_result = db_query($conn,
      ORDER BY b.created_at DESC",
     [$guard['id']]);
 ?>
-
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Guard Dashboard</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-
-        body {
-            font-family: Arial, sans-serif;
-            background: #f5f5f5;
+<?php
+    $hour = (int)date('G');
+    $greeting = $hour < 12 ? 'Good morning' : ($hour < 17 ? 'Good afternoon' : 'Good evening');
+    $photo = (!empty($guard['profile_image']) && file_exists(dirname(__DIR__) . '/' . $guard['profile_image'])) ? '../' . $guard['profile_image'] : '';
+    $bookingRows = [];
+    if ($bookings_result && $bookings_result !== true) {
+        while ($row = mysqli_fetch_assoc($bookings_result)) {
+            $bookingRows[] = $row;
         }
-
-        .sidebar {
-            position: fixed;
-            left: 0;
-            top: 0;
-            width: 250px;
-            height: 100vh;
-            background: #3498db;
-            color: white;
-            padding: 20px 0;
-            z-index: 1000;
-        }
-
-        .sidebar h3 {
-            text-align: center;
-            padding: 20px;
-            border-bottom: 1px solid #fbfdff;
-            margin-bottom: 20px;
-        }
-
-        .sidebar a {
-            display: block;
-            color: white;
-            text-decoration: none;
-            padding: 15px 25px;
-            border-bottom: 1px solid #fbfdff;
-        }
-
-        .sidebar a:hover {
-            background: #6ab1d0;
-        }
-
-        .sidebar-link {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .sidebar-link img {
-            width: 20px;
-            height: 20px;
-            flex-shrink: 0;
-        }
-
-        .sidebar .logout-btn {
-            position: absolute;
-            bottom: 20px;
-            width: 100%;
-            padding: 0 25px;
-        }
-
-        .sidebar .logout-btn a {
-            background: #e74c3c;
-            text-align: center;
-            border-radius: 5px;
-        }
-
-        .sidebar .logout-btn a:hover {
-            background: #c0392b;
-        }
-
-        .main-content {
-            margin-left: 250px;
-            padding: 30px;
-        }
-
-        .header {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 30px;
-            border: 1px solid #ddd;
-        }
-
-        .stats-container {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 20px;
-            margin-bottom: 40px;
-        }
-
-        .stat-card {
-            background: white;
-            padding: 25px;
-            border-radius: 8px;
-            text-align: center;
-            border: 1px solid #ddd;
-        }
-
-        .stat-card h3 {
-            font-size: 36px;
-            color: #3498db;
-            margin-bottom: 10px;
-        }
-
-        .section-header h3 {
-            color: #2c3e50;
-            font-size: 22px;
-            margin-bottom: 15px;
-        }
-
-        .bookings-section {
-            background: white;
-            padding: 25px;
-            border-radius: 8px;
-            border: 1px solid #ddd;
-            margin-bottom: 30px;
-        }
-
-        .bookings-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-
-        .bookings-table th,
-        .bookings-table td {
-            padding: 12px;
-            text-align: left;
-            border-bottom: 1px solid #eee;
-        }
-
-        .bookings-table th {
-            background: #f8f9fa;
-            font-weight: 600;
-            color: #2c3e50;
-        }
-
-        .status-badge {
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 12px;
-            font-weight: 600;
-        }
-
-        .status-pending {
-            background: #fff3cd;
-            color: #856404;
-        }
-
-        .status-confirmed {
-            background: #d4edda;
-            color: #155724;
-        }
-
-        .status-rejected {
-            background: #f8d7da;
-            color: #721c24;
-        }
-
-        .action-buttons {
-            display: flex;
-            gap: 10px;
-        }
-
-        .btn {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 14px;
-            text-decoration: none;
-            display: inline-block;
-            text-align: center;
-        }
-
-        .btn-confirm {
-            background: #27ae60;
-            color: white;
-        }
-
-        .btn-reject {
-            background: #e74c3c;
-            color: white;
-        }
-
-        .btn:hover {
-            opacity: 0.9;
-        }
-
-        .no-bookings {
-            text-align: center;
-            padding: 40px;
-            color: #7f8c8d;
-            font-style: italic;
-        }
-
-        .modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.6);
-            z-index: 2000;
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        #profile-view:target ~ .modal-overlay,
-        #profile-edit:target ~ .modal-overlay,
-        #password-change:target ~ .modal-overlay,
-        #my-bookings:target ~ .modal-overlay {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        .modal-card {
-            position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            width: 90%;
-            max-width: 600px;
-            max-height: 80vh;
-            overflow-y: auto;
-            z-index: 3000;
-            opacity: 0;
-            pointer-events: none;
-        }
-
-        #profile-view:target ~ .profile-card,
-        #profile-edit:target ~ .edit-card,
-        #password-change:target ~ .password-card,
-        #my-bookings:target ~ .bookings-card {
-            opacity: 1;
-            pointer-events: auto;
-        }
-
-        .close-btn {
-            position: absolute;
-            top: 10px;
-            right: 12px;
-            width: 30px;
-            height: 30px;
-            background: #e74c3c;
-            color: white;
-            text-decoration: none;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-        }
-
-        .success {
-            background: #d4edda;
-            color: #155724;
-            padding: 10px;
-            margin-bottom: 10px;
-            border: 1px solid #9fd3a9;
-            border-radius: 5px;
-        }
-    </style>
-</head>
+    }
+    $status = $guard['verification_status'];
+    page_head('Guard Dashboard', '../');
+?>
 <body>
-
-    <!-- Hidden anchors for modals -->
     <div id="profile-view"></div>
-    <div id="profile-edit"></div>
     <div id="password-change"></div>
     <div id="my-bookings"></div>
 
-    <!-- Sidebar -->
-    <div class="sidebar">
-        <h3>Guard Portal</h3>
-        <a href="#profile-view" class="sidebar-link">
-            <img src="../uploads/clients/circle-user_9821720.png" alt="Profile"> My Profile
+    <aside class="sidebar">
+        <a class="side-brand" href="../index.php">
+            <img src="../uploads/index/Image (12).jpg" alt="">
+            <span><strong>SECURITY PROVIDER</strong><small>Guard</small></span>
         </a>
-        <!--
-        <a href="#profile-edit" class="sidebar-link">
-            <img src="../uploads/clients/pen-circle_18844818.png" alt="Edit"> Edit Profile
-        </a>
-        <a href="#password-change" class="sidebar-link">
-            <img src="../uploads/clients/password-lock_17525250.png" alt="Password"> Change Password
-        </a>
-        -->
-        <a href="#my-bookings" class="sidebar-link">
-            <img src="../uploads/clients/booking_14703155.png" alt="Bookings"> My Bookings
-        </a>
+        <a href="#profile-view" class="sidebar-link"><img src="../uploads/clients/circle-user_9821720.png" alt=""> My Profile</a>
+        <a href="#password-change" class="sidebar-link"><img src="../uploads/clients/password-lock_17525250.png" alt=""> Change Password</a>
+        <a href="#bookings" class="sidebar-link"><img src="../uploads/clients/booking_14703155.png" alt=""> My Bookings</a>
+        <div class="logout-btn"><a href="guard_logout.php">Log out</a></div>
+    </aside>
 
-        <div class="logout-btn">
-            <a href="guard_logout.php">Logout</a>
-        </div>
-    </div>
+    <main class="main-content">
+        <section class="header">
+            <?php if ($photo): ?>
+                <img class="avatar" src="<?php echo e($photo); ?>" alt="">
+            <?php else: ?>
+                <div class="avatar"><?php echo e(strtoupper(mb_substr(trim($guard['full_name']), 0, 1))); ?></div>
+            <?php endif; ?>
+            <div>
+                <div class="greet"><?php echo e($greeting); ?></div>
+                <h2>Welcome, <?php echo e($guard['full_name']); ?>!</h2>
+                <p><?php echo e($guard['location']); ?> &middot; $<?php echo number_format((float)$guard['hourly_rate'], 0); ?>/hr &middot;
+                    <span class="chip chip-<?php echo e($status); ?>"><?php echo e($status); ?></span></p>
+            </div>
+        </section>
 
-    <!-- Main Content -->
-    <div class="main-content">
-        <div class="header">
-            <h2>Welcome, <?php echo e($guard['full_name']); ?>!</h2>
-            <p style="color:#666;">Email: <?php echo e($guard['email']); ?> | Status: <?php echo e(ucfirst($guard['verification_status'])); ?></p>
-        </div>
+        <?php if ($status === 'pending'): ?>
+            <div class="alert alert-gold">Your application is under review. Clients will see your profile as soon as an admin approves it.</div>
+        <?php elseif ($status === 'rejected'): ?>
+            <div class="alert alert-error">Your application was not approved. Please contact the Security Provider team for details.</div>
+        <?php endif; ?>
 
-        <!-- Statistics -->
-        <div class="stats-container">
-            <div class="stat-card">
+        <section class="stats-container">
+            <div class="stat-card accent-gold">
+                <div class="stat-icon"><?php echo icon('calendar'); ?></div>
                 <h3><?php echo e($total_bookings); ?></h3>
-                <p>Total Bookings</p>
+                <p>Total bookings</p>
             </div>
-            <div class="stat-card">
+            <div class="stat-card accent-amber">
+                <div class="stat-icon"><?php echo icon('clock'); ?></div>
                 <h3><?php echo e($pending_bookings); ?></h3>
-                <p>Pending Bookings</p>
+                <p>Need your answer</p>
             </div>
-            <div class="stat-card">
+            <div class="stat-card accent-green">
+                <div class="stat-icon"><?php echo icon('check'); ?></div>
                 <h3><?php echo e($confirmed_bookings); ?></h3>
-                <p>Confirmed Bookings</p>
+                <p>Confirmed jobs</p>
             </div>
-        </div>
+        </section>
 
-        <!-- Bookings Section -->
-        <div class="bookings-section">
+        <section class="panel" id="bookings">
             <div class="section-header">
-                <h3>My Bookings</h3>
+                <h3>My bookings</h3>
+                <span class="count"><?php echo count($bookingRows); ?> total</span>
             </div>
-
-            <?php if (mysqli_num_rows($bookings_result) > 0): ?>
-                <table class="bookings-table">
+            <?php if ($bookingRows): ?>
+                <table class="data-table">
                     <thead>
-                        <tr>
-                            <th>Client</th>
-                            <th>Phone</th>
-                            <th>Organization</th>
-                            <th>Status</th>
-                            <th>Date</th>
-                            <th>Actions</th>
-                        </tr>
+                        <tr><th>Client</th><th>Phone</th><th>Type</th><th>Status</th><th>Date</th><th>Actions</th></tr>
                     </thead>
                     <tbody>
-                        <?php while ($booking = mysqli_fetch_assoc($bookings_result)): ?>
-                        <tr>
-                            <td><?php echo htmlspecialchars($booking['client_name']); ?></td>
-                            <td><?php echo htmlspecialchars($booking['client_phone']); ?></td>
-                            <td><?php echo e(ucfirst($booking['organization_type'])); ?></td>
-                            <td>
-                                <span class="status-badge status-<?php echo e($booking['status']); ?>">
-                                    <?php echo e(ucfirst($booking['status'])); ?>
-                                </span>
-                            </td>
-                            <td><?php echo e(date('M d, Y', strtotime($booking['created_at']))); ?></td>
-                            <td>
-                                <?php if ($booking['status'] === 'pending'): ?>
-                                    <div class="action-buttons">
-                                        <form method="post" style="display: inline;">
-<?php echo csrf_field(); ?>
-                                            <input type="hidden" name="booking_id" value="<?php echo e($booking['id']); ?>">
-                                            <button type="submit" name="confirm_booking" class="btn btn-confirm">Confirm</button>
-                                        </form>
-                                        <form method="post" style="display: inline;">
-<?php echo csrf_field(); ?>
-                                            <input type="hidden" name="booking_id" value="<?php echo e($booking['id']); ?>">
-                                            <button type="submit" name="reject_booking" class="btn btn-reject" onclick="return confirm('Reject this booking?')">Reject</button>
-                                        </form>
-                                    </div>
-                                <?php endif; ?>
-                            </td>
-                        </tr>
-                        <?php endwhile; ?>
+                        <?php foreach ($bookingRows as $booking): ?>
+                            <tr>
+                                <td><strong><?php echo e($booking['client_name']); ?></strong></td>
+                                <td class="muted"><?php echo e($booking['client_phone']); ?></td>
+                                <td><?php echo e(ucfirst($booking['organization_type'])); ?></td>
+                                <td><span class="chip chip-<?php echo e($booking['status']); ?>"><?php echo e($booking['status']); ?></span></td>
+                                <td class="muted"><?php echo e(date('M d, Y', strtotime($booking['created_at']))); ?></td>
+                                <td>
+                                    <?php if ($booking['status'] === 'pending'): ?>
+                                        <div class="actions">
+                                            <form method="post" class="inline-form">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="booking_id" value="<?php echo (int)$booking['id']; ?>">
+                                                <button type="submit" name="confirm_booking" class="btn-ok btn-sm">Confirm</button>
+                                            </form>
+                                            <form method="post" class="inline-form">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="booking_id" value="<?php echo (int)$booking['id']; ?>">
+                                                <button type="submit" name="reject_booking" class="btn-danger btn-sm" onclick="return confirm('Reject this booking?')">Reject</button>
+                                            </form>
+                                        </div>
+                                    <?php else: ?>
+                                        <span class="muted">&mdash;</span>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
                     </tbody>
                 </table>
             <?php else: ?>
-                <div class="no-bookings">
-                    No bookings yet. Wait for clients to book you.
-                </div>
+                <div class="empty"><?php echo icon('calendar'); ?><p>No bookings yet. Clients will find you once you are approved.</p></div>
             <?php endif; ?>
-        </div>
-    </div>
+        </section>
+    </main>
 
-    <!-- Blur Overlay -->
-    <div class="modal-overlay"></div>
-
-    <!-- Profile Modal -->
+    <!-- Profile -->
     <div class="modal-card profile-card">
-        <a href="#" class="close-btn">&times;</a>
+        <a href="#" class="close-btn" aria-label="Close">&times;</a>
         <h3>My Profile</h3>
-        <table style="width: 100%; margin-top: 15px; border-collapse: collapse;">
-            <tr><th style="padding: 10px; border-bottom: 1px solid #eee;">Full Name:</th><td style="padding: 10px; border-bottom: 1px solid #eee;"><?php echo e($guard['full_name']); ?></td></tr>
-            <tr><th style="padding: 10px; border-bottom: 1px solid #eee;">Email:</th><td style="padding: 10px; border-bottom: 1px solid #eee;"><?php echo e($guard['email']); ?></td></tr>
-            <tr><th style="padding: 10px; border-bottom: 1px solid #eee;">Phone:</th><td style="padding: 10px; border-bottom: 1px solid #eee;"><?php echo e($guard['phone']); ?></td></tr>
-            <tr><th style="padding: 10px; border-bottom: 1px solid #eee;">Location:</th><td style="padding: 10px; border-bottom: 1px solid #eee;"><?php echo e($guard['location']); ?></td></tr>
-            <tr><th style="padding: 10px; border-bottom: 1px solid #eee;">Experience:</th><td style="padding: 10px; border-bottom: 1px solid #eee;"><?php echo e($guard['experience']); ?> years</td></tr>
-            <tr><th style="padding: 10px;">Status:</th><td style="padding: 10px;"><?php echo e(ucfirst($guard['verification_status'])); ?></td></tr>
+        <?php if ($photo): ?>
+            <img class="profile-photo" src="<?php echo e($photo); ?>" alt="">
+        <?php endif; ?>
+        <table class="info-table">
+            <tr><th>Full name</th><td><?php echo e($guard['full_name']); ?></td></tr>
+            <tr><th>Email</th><td><?php echo e($guard['email']); ?></td></tr>
+            <tr><th>Phone</th><td><?php echo e($guard['phone']); ?></td></tr>
+            <tr><th>Location</th><td><?php echo e($guard['location']); ?></td></tr>
+            <tr><th>Experience</th><td><?php echo (int)$guard['experience']; ?> years</td></tr>
+            <tr><th>Hourly rate</th><td>$<?php echo number_format((float)$guard['hourly_rate'], 2); ?>/hr</td></tr>
+            <tr><th>Skills</th><td><?php echo nl2br(e($guard['skills'])); ?></td></tr>
+            <tr><th>Specialties</th><td><?php echo e($guard['specialties']); ?></td></tr>
+            <tr><th>Status</th><td><span class="chip chip-<?php echo e($status); ?>"><?php echo e($status); ?></span></td></tr>
         </table>
     </div>
 
-    <!-- Other modals (Edit Profile, Change Password) - simplified for brevity -->
-    <div class="modal-card edit-card">
-        <a href="#" class="close-btn">&times;</a>
-        <h3>Edit Profile (Coming Soon)</h3>
-        <p>Profile editing functionality will be added later.</p>
-    </div>
-
+    <!-- Change Password -->
     <div class="modal-card password-card">
-        <a href="#" class="close-btn">&times;</a>
-        <h3>Change Password (Coming Soon)</h3>
-        <p>Password change functionality will be added later.</p>
+        <a href="#" class="close-btn" aria-label="Close">&times;</a>
+        <h3>Change Password</h3>
+        <?php if ($passwordSuccess): ?>
+            <div class="success"><?php echo e($passwordSuccess); ?></div>
+        <?php endif; ?>
+        <form method="post" action="#password-change">
+            <?php echo csrf_field(); ?>
+            <div class="field">
+                <label for="cp-current">Current password</label>
+                <input type="password" id="cp-current" name="current_password">
+                <span class="error"><?php echo e($currentErr); ?></span>
+            </div>
+            <div class="field">
+                <label for="cp-new">New password</label>
+                <input type="password" id="cp-new" name="new_password">
+                <span class="error"><?php echo e($newErr); ?></span>
+                <span class="hint">8+ characters, letters and numbers.</span>
+            </div>
+            <div class="field">
+                <label for="cp-confirm">Confirm new password</label>
+                <input type="password" id="cp-confirm" name="confirm_password">
+                <span class="error"><?php echo e($confirmErr); ?></span>
+            </div>
+            <button type="submit" name="change_password" class="btn-gold">Update password</button>
+        </form>
     </div>
 
-    <div class="modal-card bookings-card">
-        <a href="#" class="close-btn">&times;</a>
-        <h3>My Bookings</h3>
-        <p>Bookings are shown above.</p>
-    </div>
-
+    <a href="#" class="modal-overlay" aria-label="Close"></a>
 </body>
 </html>
