@@ -69,6 +69,5 @@ database/
   migrate.sql            Upgrade for an existing database
 ```
 
-## Team
 
-Fayaz Abrar, Hasibul Islam, MD. Imrul Kayes Rifat
+  
