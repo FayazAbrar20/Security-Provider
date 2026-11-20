@@ -1,309 +1,242 @@
-<!DOCTYPE html>
-<html>
-<head>
-<title>Security Provider</title>
-<link rel="stylesheet" href=".//index.css">
-<style>
-.navbar {
-   display: flex;
-   align-items: center;
-   justify-content: space-between;
-   padding: 10px 40px;
-   position: sticky;
-   top: 0;
-   background: rgba(16, 15, 15, 0.3);
-   backdrop-filter: blur(10px);
-   z-index: 1000;
-   color:white;
+<?php
+include "db.php";
 
-}
+// Real numbers from the database (no made-up marketing figures).
+$stats = db_one($conn,
+    "SELECT
+        (SELECT COUNT(*) FROM guards WHERE verification_status = 'approved') AS guards,
+        (SELECT COUNT(DISTINCT location) FROM guards WHERE verification_status = 'approved') AS cities,
+        (SELECT COUNT(*) FROM bookings WHERE status = 'confirmed') AS confirmed,
+        (SELECT COUNT(*) FROM clients) AS clients") ?? [];
 
-.btn-nav {
-   display: flex;
-   gap: 10px;
+// Up to four verified guards to feature, newest first.
+$featured = [];
+$result = db_query($conn,
+    "SELECT id, full_name, location, experience, hourly_rate, specialties, profile_image, availability_status
+     FROM guards WHERE verification_status = 'approved' ORDER BY created_at DESC LIMIT 4");
+if ($result && $result !== true) {
+    while ($row = mysqli_fetch_assoc($result)) {
+        $featured[] = $row;
+    }
 }
 
-.btn-signin, .btn-register {
-   background: rgba(255,255,255,0.2);
-   color: white;
-   padding: 10px 20px;
-   border-radius: 25px;
-   text-decoration: none;
-}
-
-.signin-dropdown {
-      position: absolute;
-      top: 25px;
-      right: -30;
-      background: #2c3e50;
-      border-radius: 8px;
-      min-width: 120px;
-      opacity: 0;
-      visibility: hidden;
-}
-
-.register-dropdown {
-      position: absolute;
-      top: 25px;
-      right: 0;
-      background: #2c3e50;
-      border-radius: 8px;
-      min-width: 150px;
-      opacity: 0;
-      visibility: hidden;
-}
-
-.btn-signin:hover + .signin-dropdown,
-.signin-dropdown:hover {
-      opacity: 1;
-      visibility: visible;
-}
-
-.btn-register:hover + .register-dropdown,
-.register-dropdown:hover {
-      opacity: 1;
-      visibility: visible;
-}
-
-.signin-dropdown a, .register-dropdown a {
-      display: block;
-      padding: 12px 15px;
-      color: white;
-      font-size: 14px;
-}
-
-.signin-dropdown a:hover, .register-dropdown a:hover {
-      background: #34495e;
-}
-
-
-
-body {
-   margin: 0;
-   min-height: 100vh;
-   background-image: url("https://bc-user-uploads.brandcrowd.com/public/media-Production/84cb8f0c-efa9-43e9-9f06-bd99bde7b0f2/27cb0a83-1706-4400-8ec0-a8aa65293eb2.jpg");
-   background-size: cover;
-   background-position: center;
-   background-repeat: no-repeat;
-   background-attachment: fixed;
-   color:white;
-   font-family: 'Claus Eggers Sørensen', sans-serif;
-
-}
-
-.stats {
-   display: flex;
-   justify-content: space-around;
-   align-items: center;
-   padding: 20px;
-   border-top: 1px solid black;
-   border-bottom: 1px solid black;
-   width: 100%;
-       font-size: 20px;
-}
-.heading {
-   display: flex;
-   justify-content: center;
-   align-items: center;
-   flex-direction: column;
-   justify-content: space-between;
-   text-align: center;
-   margin-top: 200px;
-   margin-bottom: 50px;
-       font-size: 20px;
-
-}
-.links1 {
-   display: block;
-   justify-content: center;
-   align-items: center;
-   flex-direction: row;
-   margin-bottom: 200px;
-   justify-content: space-between;
-   text-align: center;
-}
-a {
-   display: inline block;
-   margin: 20px;
-   color: white;
-   text-decoration: none;
-   background-color: transparent;
-   padding: 20px 20px;
-   border-radius: 100px;
-}
-a:hover {
-   color : black;
-   background: #f1cc75;
-}
-.stat {
-   text-align: center;
-}
-.profiles {
-   display: flex;
-   justify-content: space-around;
-   align-items: center;
-   padding: 15px;
-   margin-top: 100px;
-   margin-bottom: 100px;
-       font-size: 20px;
-
-}
-.profile {
-   display: flex;
-   flex-direction: column;
-   justify-content: space-around;
-   align-items: center;
-   padding: 15px;
-   border: 2px solid #DBDBDB;
-}
-.profile:hover {
-   transform: scale(1.02);
-}
-.btn {
-   color: white;
-   background-color: white;
-   border: #C7C7C7;
-   padding: 10px 10px;
-   border-radius: 100px;
-   cursor: pointer;
-   background-color: transparent;
-}
-.btn:hover {
-   color: black;
-   background: #f1cc75;
-}
-.footer {
-   color:black;
-   display: flex;
-   justify-content: space-around;
-   align-items: center;
-   padding: 30px;
-   border-top: 1px solid black;
-   border-bottom: 1px solid black;
-   width: 100%;
-   margin-bottom: 100px;
-   background: #f1cc75;
-   font-size: 20px;
-
-}
-
-</style>
-</head>
+page_head('Professional Security On Demand', '', ['assets/landing.css']);
+?>
 <body>
-<nav class="navbar">
-<img class="img1" src="uploads/index/Image (12).jpg"
-           height="80px" width="80px">
-<H1 class = "nav1">SECURITY PROVIDER</H1>
+    <nav class="lp-nav">
+        <a class="brand" href="index.php">
+            <img src="uploads/index/Image (12).jpg" alt="">
+            <span>SECURITY PROVIDER</span>
+        </a>
+        <div class="lp-links">
+            <a href="#guards">Guards</a>
+            <a href="#how">How it works</a>
+            <a href="#why">Why us</a>
+        </div>
+        <div class="lp-actions">
+            <div class="dropdown">
+                <button type="button" class="btn-outline" aria-haspopup="true">Sign in</button>
+                <div class="menu">
+                    <a href="Client/client_login.php"><?php echo icon('user'); ?><span>Client<small>Book and manage guards</small></span></a>
+                    <a href="Guard/guard_login.php"><?php echo icon('badge'); ?><span>Guard<small>See your bookings</small></span></a>
+                    <a href="Admin/admin_login.php"><?php echo icon('shield'); ?><span>Admin<small>Verify guards</small></span></a>
+                </div>
+            </div>
+            <div class="dropdown">
+                <button type="button" class="btn-solid" aria-haspopup="true">Get started</button>
+                <div class="menu">
+                    <a href="Client/client_register.php"><?php echo icon('user'); ?><span>I need security<small>Create a client account</small></span></a>
+                    <a href="Guard/guard_register.php"><?php echo icon('badge'); ?><span>I am a guard<small>Apply to join</small></span></a>
+                </div>
+            </div>
+        </div>
+    </nav>
 
-   <div class="btn-nav">
-      <a href="#" class="btn-signin">Sign In </a>
-      <div class="signin-dropdown">
-            <a href="Admin/admin_login.php"> Admin </a>
-            <a href="Client/client_login.php"> Client </a>
-            <a href="Guard/guard_login.php"> Guard </a>
-      </div>
-      
-      <a href="#" class="btn-register">Register</a>
-      <div class="register-dropdown">
-            <a href="Client/client_register.php"> Register as Client</a>
-            <a href="Guard/guard_register.php"> Register as Guard</a>
-      </div>
-   </div>
-</nav>
+    <main>
+        <section class="wrap hero">
+            <div>
+                <div class="eyebrow"><span class="dot"></span> Every guard is verified by our team</div>
+                <h1>Professional security,<br><span class="gold-text">on demand.</span></h1>
+                <p class="lead">Book trusted, verified security professionals for your home, business or event in minutes.
+                    Compare experience and rates, book in one click, and get a confirmation from the guard.</p>
+                <div class="hero-ctas">
+                    <a class="btn-gold" style="width:auto" href="Client/client_register.php">Book a guard &rarr;</a>
+                    <a class="btn-ghost" href="Guard/guard_register.php">Become a guard</a>
+                </div>
+                <div class="trust">
+                    <span><?php echo icon('check'); ?> Admin-verified profiles</span>
+                    <span><?php echo icon('lock'); ?> Secure accounts</span>
+                    <span><?php echo icon('clock'); ?> Book in minutes</span>
+                </div>
+            </div>
 
-<section class="heading">
-<label>
-<h1>Professional Security <br>On Demand.</h1>
-</label>
-<label>
-<h2>Book top-rated security professionals for your events, business, or personal needs in minutes. Verified,
-               trained, and ready to serve.</h2>
-</label>
-</section>
-<section class="links1">
-<a href="#profiles">
-           Browse Guards </a>
-<a href="#footer">
-           How it works
-</a><br>
-</section>
-<section class="stats">
-<div class="stat">
-<h2>20+</h2>
-<p>Active Guards</p>
-</div>
-<div class="stat">
-<h2>4.8/5</h2>
-<p>Client rating</p>
-</div>
-<div class="stat">
-<h2>8+</h2>
-<p>Cities covered</p>
-</div>
-<div class="stat">
-<h2>10k+</h2>
-<p>Hours secured</p>
-</div>
-</section>
-<br>
-<section class="profiles" id="profiles">
-<div class="profile">
-<img src="https://img.freepik.com/free-photo/portrait-male-security-guard-with-uniform_23-2150368731.jpg"
-               width="300px" height="200px">
-<p>james </p><br>
-<p>dhaka</p>
-<p class="price">$20/hr</p>
-<button class="btn" onclick="alert('please sign in')">View Profile</button>
-</div>
-<div class="profile">
-<img src="https://static.vecteezy.com/system/resources/thumbnails/039/892/385/small/ai-generated-a-security-guard-with-his-arms-crossed-on-the-sidewalk-free-photo.jpeg"
-               width="300px" height="200px">
-<p>james</p>
-<p>dhaka</p>
-<p class="price">$20/hr</p>
-<button class="btn" onclick="alert('please sign in')">View Profile</button>
-</div>
-<div class="profile">
-<img src="https://static.vecteezy.com/system/resources/thumbnails/039/892/247/small/ai-generated-a-security-guard-with-his-arms-crossed-on-the-sidewalk-free-photo.jpeg"
-               width="300px" height="200px">
-<p>james</p>
-<p>dhaka</p>
-<p class="price">$20/hr</p>
-<button class="btn" onclick="alert('please sign in')">View Profile</button>
-</div>
-<div class="profile">
-<img src="https://img.freepik.com/premium-photo/security-guard-standing-confidently-front-modern-building-arms-crossed-with-light-solid-color-background_1081303-4476.jpg?semt=ais_hybrid&w=740&q=80"
-               width="300px" height="200px">
-<p>james</p>
-<p>dhaka</p>
-<p class="price">$20/hr</p>
-<button class="btn" onclick="alert('please sign in')">View Profile</button>
-</div>
-</section><br><br><br>
+            <div class="hero-visual" aria-hidden="true">
+                <div class="orbit o3"></div>
+                <div class="orbit o2"></div>
+                <div class="orbit o1"></div>
+                <div class="shield"><img src="uploads/index/Image (12).jpg" alt=""></div>
+                <div class="float-card fc1">
+                    <div class="ic ic-green"><?php echo icon('check'); ?></div>
+                    <div><strong>Booking confirmed</strong><small>Guard on duty tonight</small></div>
+                </div>
+                <div class="float-card fc2">
+                    <div class="ic ic-gold"><?php echo icon('badge'); ?></div>
+                    <div><strong>Verified guard</strong><small>Approved by an admin</small></div>
+                </div>
+                <div class="float-card fc3">
+                    <div class="ic ic-blue"><?php echo icon('calendar'); ?></div>
+                    <div><strong>Event security</strong><small>Home &middot; Business &middot; Personal</small></div>
+                </div>
+            </div>
+        </section>
 
+        <div class="wrap">
+            <div class="stats-band">
+                <div><b class="gold-text"><?php echo (int)($stats['guards'] ?? 0); ?></b><span>Verified guards</span></div>
+                <div><b class="gold-text"><?php echo (int)($stats['cities'] ?? 0); ?></b><span>Areas covered</span></div>
+                <div><b class="gold-text"><?php echo (int)($stats['confirmed'] ?? 0); ?></b><span>Confirmed bookings</span></div>
+                <div><b class="gold-text"><?php echo (int)($stats['clients'] ?? 0); ?></b><span>Registered clients</span></div>
+            </div>
+        </div>
 
-<footer class="footer" id="footer">
+        <section class="section wrap" id="guards">
+            <div class="section-title">
+                <div class="kicker">Our guards</div>
+                <h2>Meet some of our verified professionals</h2>
+                <p>Every profile is reviewed by an admin before clients can see it. Sign in to view full profiles and book.</p>
+            </div>
+            <div class="lp-guards">
+                <?php foreach ($featured as $guard): ?>
+                    <?php
+                        $specialties = array_filter(array_map('trim', explode(',', $guard['specialties'] ?? '')));
+                        $img = (!empty($guard['profile_image']) && file_exists(__DIR__ . '/' . $guard['profile_image']))
+                            ? implode('/', array_map('rawurlencode', explode('/', $guard['profile_image']))) : '';
+                    ?>
+                    <article class="guard-card">
+                        <div class="guard-image-container">
+                            <?php if ($img): ?><img class="guard-image" src="<?php echo e($img); ?>" alt="<?php echo e($guard['full_name']); ?>"><?php endif; ?>
+                        </div>
+                        <span class="availability-badge"><?php echo e($guard['availability_status'] ?? 'available'); ?></span>
+                        <div class="guard-info">
+                            <div class="guard-name"><?php echo e($guard['full_name']); ?></div>
+                            <div class="guard-location"><?php echo e($guard['location']); ?> &middot; <?php echo (int)$guard['experience']; ?> yrs experience</div>
+                            <div class="guard-specialties">
+                                <?php foreach (array_slice($specialties, 0, 3) as $specialty): ?>
+                                    <span class="specialty-tag"><?php echo e($specialty); ?></span>
+                                <?php endforeach; ?>
+                            </div>
+                            <div class="guard-footer">
+                                <div class="guard-price">$<?php echo number_format((float)$guard['hourly_rate'], 0); ?><span class="price-unit"> /hr</span></div>
+                                <a class="view-profile-btn" href="Client/client_login.php">View profile</a>
+                            </div>
+                        </div>
+                    </article>
+                <?php endforeach; ?>
+                <?php if (count($featured) < 4): ?>
+                    <div class="join-card">
+                        <?php echo icon('badge'); ?>
+                        <h3>Your profile could be here</h3>
+                        <p>Experienced in security? Apply, get verified, and start receiving bookings.</p>
+                        <a class="btn-ghost" href="Guard/guard_register.php">Apply as a guard</a>
+                    </div>
+                <?php endif; ?>
+            </div>
+        </section>
 
-<div>
-<img src="uploads/index/Image (13).jpg"
-               width="50px" height="50px">
-<p>1.Choose a Guard</p>
-<p>Browse profiles, filter by specialty to find the perfect match</p>
-</div>
-<div>
-<img src="uploads/index/Image (11).jpg"
-               width="50px" height="50px">
-<p>2.Book a Time</p>
-<p>Select your dates and times directly on their calendar..</p>
-</div>
-<div class="img1">
-<img src="uploads/index/Image (14).jpg"
-               width="50px" height="50px" >
-<p>3.Stay Secure</p>
-<p>Your guard arrives on time, fully briefed and ready to protect.</p>
-</div>
+        <section class="section wrap" id="how">
+            <div class="section-title">
+                <div class="kicker">How it works</div>
+                <h2>Safe in three simple steps</h2>
+                <p>No phone calls or paperwork. Everything happens in your dashboard.</p>
+            </div>
+            <div class="steps-grid">
+                <div class="step">
+                    <div class="num">1</div>
+                    <div class="big-ic"><?php echo icon('search'); ?></div>
+                    <h3>Choose a guard</h3>
+                    <p>Search verified guards by name, area or specialty, and compare experience and hourly rates.</p>
+                </div>
+                <div class="step">
+                    <div class="num">2</div>
+                    <div class="big-ic"><?php echo icon('calendar'); ?></div>
+                    <h3>Book in one click</h3>
+                    <p>Send a booking request and follow its status live: pending, confirmed or declined.</p>
+                </div>
+                <div class="step">
+                    <div class="num">3</div>
+                    <div class="big-ic"><?php echo icon('shield'); ?></div>
+                    <h3>Stay secure</h3>
+                    <p>Your guard confirms and arrives briefed and ready to protect what matters to you.</p>
+                </div>
+            </div>
+        </section>
 
-</footer>
+        <section class="section wrap" id="why">
+            <div class="section-title">
+                <div class="kicker">Why Security Provider</div>
+                <h2>Built on trust, from sign-up to shift</h2>
+            </div>
+            <div class="feature-grid">
+                <div class="feature">
+                    <div class="f-ic"><?php echo icon('check'); ?></div>
+                    <h3>Verified professionals</h3>
+                    <p>Admins review every guard application before it goes live.</p>
+                </div>
+                <div class="feature">
+                    <div class="f-ic"><?php echo icon('users'); ?></div>
+                    <h3>For every need</h3>
+                    <p>Homes, businesses, events and personal protection.</p>
+                </div>
+                <div class="feature">
+                    <div class="f-ic"><?php echo icon('clock'); ?></div>
+                    <h3>Clear hourly rates</h3>
+                    <p>See each guard's rate and experience up front, with no hidden steps.</p>
+                </div>
+                <div class="feature">
+                    <div class="f-ic"><?php echo icon('lock'); ?></div>
+                    <h3>Secure by design</h3>
+                    <p>Hashed passwords, protected forms and safe account recovery.</p>
+                </div>
+            </div>
+
+            <div class="cta">
+                <div>
+                    <h2>Ready to feel safer?</h2>
+                    <p>Create a free account and book your first guard today.</p>
+                </div>
+                <div class="cta-btns">
+                    <a class="btn-gold btn-dark" style="width:auto" href="Client/client_register.php">Book a guard</a>
+                    <a class="btn-gold btn-light" style="width:auto" href="Guard/guard_register.php">Join as a guard</a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <footer class="lp-footer">
+        <div class="wrap">
+            <span>&copy; <?php echo date('Y'); ?> Security Provider. All rights reserved.</span>
+            <nav>
+                <a href="#guards">Guards</a>
+                <a href="#how">How it works</a>
+                <a href="Client/client_login.php">Client login</a>
+                <a href="Guard/guard_login.php">Guard login</a>
+                <a href="Admin/admin_login.php">Admin</a>
+            </nav>
+        </div>
+    </footer>
+    <script>
+        // Tap support for the Sign in / Get started menus (hover does not exist on phones).
+        document.querySelectorAll('.dropdown > button').forEach(function (button) {
+            button.addEventListener('click', function (event) {
+                event.stopPropagation();
+                var menu = button.parentElement;
+                document.querySelectorAll('.dropdown.open').forEach(function (d) { if (d !== menu) d.classList.remove('open'); });
+                menu.classList.toggle('open');
+            });
+        });
+        document.addEventListener('click', function () {
+            document.querySelectorAll('.dropdown.open').forEach(function (d) { d.classList.remove('open'); });
+        });
+    </script>
 </body>
-
 </html>

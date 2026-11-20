@@ -23,7 +23,7 @@ function icon(string $name): string
     return ICONS[$name] ?? '';
 }
 
-function page_head(string $title, string $root): void
+function page_head(string $title, string $root, array $extraCss = []): void
 {
     ?>
 <!DOCTYPE html>
@@ -32,9 +32,19 @@ function page_head(string $title, string $root): void
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?php echo e($title); ?> · Security Provider</title>
-    <link rel="stylesheet" href="<?php echo e($root); ?>assets/theme.css">
+    <link rel="icon" href="<?php echo e($root); ?>uploads/index/Image (12).jpg">
+    <?php foreach (array_merge(['assets/theme.css'], $extraCss) as $css): ?>
+    <link rel="stylesheet" href="<?php echo e(asset_url($root, $css)); ?>">
+    <?php endforeach; ?>
 </head>
 <?php
+}
+
+// Adds the file's last-modified time, so browsers fetch a stylesheet again after it changes.
+function asset_url(string $root, string $path): string
+{
+    $file = dirname(__DIR__) . '/' . $path;
+    return $root . $path . (is_file($file) ? '?v=' . filemtime($file) : '');
 }
 
 function auth_start(string $title, string $subtitle, string $root, string $iconName = 'shield', bool $wide = false): void
