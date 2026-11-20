@@ -1,13 +1,13 @@
 <?php
 include "db.php";
 
-// Real numbers from the database (no made-up marketing figures).
-$stats = db_one($conn,
-    "SELECT
-        (SELECT COUNT(*) FROM guards WHERE verification_status = 'approved') AS guards,
-        (SELECT COUNT(DISTINCT location) FROM guards WHERE verification_status = 'approved') AS cities,
-        (SELECT COUNT(*) FROM bookings WHERE status = 'confirmed') AS confirmed,
-        (SELECT COUNT(*) FROM clients) AS clients") ?? [];
+// Showcase figures for the landing page (the original numbers).
+$stats = [
+    ['20+', 'Active guards'],
+    ['4.8/5', 'Client rating'],
+    ['8+', 'Cities covered'],
+    ['10k+', 'Hours secured'],
+];
 
 // Sample guard profiles shown on the landing page (the original showcase photos).
 $featured = [
@@ -93,10 +93,9 @@ page_head('Professional Security On Demand', '', ['assets/landing.css']);
 
         <div class="wrap">
             <div class="stats-band">
-                <div><b class="gold-text"><?php echo (int)($stats['guards'] ?? 0); ?></b><span>Verified guards</span></div>
-                <div><b class="gold-text"><?php echo (int)($stats['cities'] ?? 0); ?></b><span>Areas covered</span></div>
-                <div><b class="gold-text"><?php echo (int)($stats['confirmed'] ?? 0); ?></b><span>Confirmed bookings</span></div>
-                <div><b class="gold-text"><?php echo (int)($stats['clients'] ?? 0); ?></b><span>Registered clients</span></div>
+                <?php foreach ($stats as [$value, $label]): ?>
+                    <div><b class="gold-text"><?php echo e($value); ?></b><span><?php echo e($label); ?></span></div>
+                <?php endforeach; ?>
             </div>
         </div>
 
