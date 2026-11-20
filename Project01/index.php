@@ -9,16 +9,17 @@ $stats = db_one($conn,
         (SELECT COUNT(*) FROM bookings WHERE status = 'confirmed') AS confirmed,
         (SELECT COUNT(*) FROM clients) AS clients") ?? [];
 
-// Up to four verified guards to feature, newest first.
-$featured = [];
-$result = db_query($conn,
-    "SELECT id, full_name, location, experience, hourly_rate, specialties, profile_image, availability_status
-     FROM guards WHERE verification_status = 'approved' ORDER BY created_at DESC LIMIT 4");
-if ($result && $result !== true) {
-    while ($row = mysqli_fetch_assoc($result)) {
-        $featured[] = $row;
-    }
-}
+// Sample guard profiles shown on the landing page (the original showcase photos).
+$featured = [
+    ['full_name' => 'James', 'location' => 'Dhaka', 'experience' => 5, 'hourly_rate' => 20, 'specialties' => 'Event security, Night shift',
+     'image' => 'https://img.freepik.com/free-photo/portrait-male-security-guard-with-uniform_23-2150368731.jpg'],
+    ['full_name' => 'James', 'location' => 'Dhaka', 'experience' => 4, 'hourly_rate' => 20, 'specialties' => 'Corporate, Patrol',
+     'image' => 'https://static.vecteezy.com/system/resources/thumbnails/039/892/385/small/ai-generated-a-security-guard-with-his-arms-crossed-on-the-sidewalk-free-photo.jpeg'],
+    ['full_name' => 'James', 'location' => 'Dhaka', 'experience' => 6, 'hourly_rate' => 20, 'specialties' => 'Home security, CCTV',
+     'image' => 'https://static.vecteezy.com/system/resources/thumbnails/039/892/247/small/ai-generated-a-security-guard-with-his-arms-crossed-on-the-sidewalk-free-photo.jpeg'],
+    ['full_name' => 'James', 'location' => 'Dhaka', 'experience' => 3, 'hourly_rate' => 20, 'specialties' => 'Personal protection, Escort',
+     'image' => 'https://img.freepik.com/premium-photo/security-guard-standing-confidently-front-modern-building-arms-crossed-with-light-solid-color-background_1081303-4476.jpg?semt=ais_hybrid&w=740&q=80'],
+];
 
 page_head('Professional Security On Demand', '', ['assets/landing.css']);
 ?>
@@ -109,14 +110,12 @@ page_head('Professional Security On Demand', '', ['assets/landing.css']);
                 <?php foreach ($featured as $guard): ?>
                     <?php
                         $specialties = array_filter(array_map('trim', explode(',', $guard['specialties'] ?? '')));
-                        $img = (!empty($guard['profile_image']) && file_exists(__DIR__ . '/' . $guard['profile_image']))
-                            ? implode('/', array_map('rawurlencode', explode('/', $guard['profile_image']))) : '';
                     ?>
                     <article class="guard-card">
                         <div class="guard-image-container">
-                            <?php if ($img): ?><img class="guard-image" src="<?php echo e($img); ?>" alt="<?php echo e($guard['full_name']); ?>"><?php endif; ?>
+                            <img class="guard-image" src="<?php echo e($guard['image']); ?>" alt="<?php echo e($guard['full_name']); ?>" loading="lazy">
                         </div>
-                        <span class="availability-badge"><?php echo e($guard['availability_status'] ?? 'available'); ?></span>
+                        <span class="availability-badge">available</span>
                         <div class="guard-info">
                             <div class="guard-name"><?php echo e($guard['full_name']); ?></div>
                             <div class="guard-location"><?php echo e($guard['location']); ?> &middot; <?php echo (int)$guard['experience']; ?> yrs experience</div>
@@ -132,14 +131,6 @@ page_head('Professional Security On Demand', '', ['assets/landing.css']);
                         </div>
                     </article>
                 <?php endforeach; ?>
-                <?php if (count($featured) < 4): ?>
-                    <div class="join-card">
-                        <?php echo icon('badge'); ?>
-                        <h3>Your profile could be here</h3>
-                        <p>Experienced in security? Apply, get verified, and start receiving bookings.</p>
-                        <a class="btn-ghost" href="Guard/guard_register.php">Apply as a guard</a>
-                    </div>
-                <?php endif; ?>
             </div>
         </section>
 
